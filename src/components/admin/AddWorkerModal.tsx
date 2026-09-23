@@ -119,7 +119,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
 
         <div>
           <label className="block text-xs font-bold text-[#172017] mb-1">
-            Email Address <span className="text-[#E53935]">*</span>
+            Worker Email Address <span className="text-[#E53935]">*</span>
           </label>
           <input
             type="email"
@@ -129,6 +129,9 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
             onChange={(e) => setEmail(e.target.value)}
             className="nexgen-input"
           />
+          <p className="text-[11px] text-[#0BAA45] font-semibold mt-1 flex items-center gap-1">
+            <span>📧 Whenever work is assigned to this telecaller, an automated message and calling sheet (.CSV) will be sent to this email address automatically.</span>
+          </p>
         </div>
 
         <div>

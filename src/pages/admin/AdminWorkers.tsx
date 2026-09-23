@@ -2,18 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { AddWorkerModal } from '../../components/admin/AddWorkerModal';
+import { EmailDispatchModal } from '../../components/admin/EmailDispatchModal';
 import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
-import { UserProfile, WorkerPerformance } from '../../types';
+import { UserProfile, WorkerPerformance, EmailDispatchLog } from '../../types';
 import {
   UserPlus,
   CheckCircle2,
   Phone,
   Mail,
-  Target,
   Edit2,
   Power,
   KeyRound,
   ArrowUpRight,
+  Send,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { showToast } from '../../components/common/Toast';
 
@@ -24,12 +26,17 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
   const [workersPerf, setWorkersPerf] = useState<WorkerPerformance[]>(() =>
     dataStore.getAllWorkersPerformance()
   );
+  const [emailDispatches, setEmailDispatches] = useState<EmailDispatchLog[]>(() =>
+    dataStore.getEmailDispatchLogs()
+  );
   const [isAddWorkerOpen, setIsAddWorkerOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [editingWorker, setEditingWorker] = useState<UserProfile | null>(null);
 
   const refreshData = () => {
     setWorkers(dataStore.getWorkers());
     setWorkersPerf(dataStore.getAllWorkersPerformance());
+    setEmailDispatches(dataStore.getEmailDispatchLogs());
   };
 
   useEffect(() => {
@@ -52,6 +59,26 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
     showToast(`Password reset link sent to ${worker.email}`, 'info');
   };
 
+  const handleEmailWorkerSheet = (worker: UserProfile) => {
+    const assignedLeads = dataStore.getLeads(worker.id);
+    if (assignedLeads.length === 0) {
+      showToast(`No leads are currently assigned to ${worker.fullName}. Assign leads first!`, 'warning');
+      return;
+    }
+
+    const leadIds = assignedLeads.map((l) => l.id);
+    const dispatch = dataStore.sendAssignmentEmailAndSheet(worker.id, leadIds);
+
+    if (dispatch) {
+      showToast(
+        `📧 Dispatched ${assignedLeads.length} leads sheet to ${worker.email}`,
+        'success',
+        'Lead Sheet Dispatched'
+      );
+      refreshData();
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Header */}
@@ -59,27 +86,41 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#172017] tracking-tight">Workers</h1>
           <p className="text-sm text-[#6B756D] mt-0.5">
-            Manage telecallers, team daily quotas, and account status ({workers.length} active workers)
+            Manage telecaller workforce, automated email sheets, and daily quotas ({workers.length} workers)
           </p>
         </div>
 
-        <Button
-          type="button"
-          variant="primary"
-          onClick={() => {
-            setEditingWorker(null);
-            setIsAddWorkerOpen(true);
-          }}
-          icon={<UserPlus className="w-4 h-4" />}
-        >
-          ADD WORKER
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEmailModalOpen(true)}
+            icon={<Mail className="w-3.5 h-3.5 text-[#0BAA45]" />}
+          >
+            Dispatched Emails ({emailDispatches.length})
+          </Button>
+
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            onClick={() => {
+              setEditingWorker(null);
+              setIsAddWorkerOpen(true);
+            }}
+            icon={<UserPlus className="w-4 h-4" />}
+          >
+            ADD WORKER
+          </Button>
+        </div>
       </div>
 
       {/* Workers Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
         {workersPerf.map((perf) => {
           const profile = workers.find((w) => w.id === perf.workerId);
+          const assignedLeads = dataStore.getLeads(perf.workerId);
           const percentage = Math.min(100, Math.round((perf.callsToday / (perf.dailyTarget || 15)) * 100));
           const isCompleted = perf.callsToday >= perf.dailyTarget;
 
@@ -105,8 +146,8 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
                       </span>
                     </div>
                     <div className="text-xs text-[#6B756D] flex items-center gap-3 mt-1">
-                      <span className="flex items-center gap-1">
-                        <Mail className="w-3 h-3" /> {perf.email}
+                      <span className="flex items-center gap-1 font-mono font-medium text-[#172017]">
+                        <Mail className="w-3 h-3 text-[#0BAA45]" /> {perf.email}
                       </span>
                       {perf.phone && (
                         <span className="flex items-center gap-1">
@@ -146,26 +187,32 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
                 </div>
               </div>
 
-              {/* Performance Box */}
+              {/* Performance & Quota Box */}
               <div className="p-4 bg-[#F7F8F6] rounded-xl border border-[#E5E9E5] mb-4">
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B756D] block">
-                      Today's Calls
+                <div className="grid grid-cols-3 gap-2 mb-3 text-center">
+                  <div className="p-2 bg-white rounded-lg border border-[#E5E9E5]/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B756D] block">
+                      Assigned Leads
                     </span>
-                    <span className="text-xl font-extrabold text-[#172017]">
-                      {perf.callsToday}{' '}
-                      <span className="text-xs font-semibold text-[#6B756D]">
-                        / {perf.dailyTarget}
-                      </span>
+                    <span className="text-base font-extrabold text-[#172017]">
+                      {assignedLeads.length}
                     </span>
                   </div>
 
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-[#6B756D] block">
+                  <div className="p-2 bg-white rounded-lg border border-[#E5E9E5]/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B756D] block">
+                      Calls Today
+                    </span>
+                    <span className="text-base font-extrabold text-[#172017]">
+                      {perf.callsToday} / {perf.dailyTarget}
+                    </span>
+                  </div>
+
+                  <div className="p-2 bg-white rounded-lg border border-[#E5E9E5]/60">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-[#6B756D] block">
                       Connected
                     </span>
-                    <span className="text-xl font-extrabold text-[#0BAA45]">
+                    <span className="text-base font-extrabold text-[#0BAA45]">
                       {perf.connectedToday}
                     </span>
                   </div>
@@ -196,24 +243,36 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-2 border-t border-[#E5E9E5]/60 text-xs">
+              <div className="flex flex-wrap items-center justify-between pt-2 border-t border-[#E5E9E5]/60 text-xs gap-2">
                 <button
                   type="button"
-                  onClick={() => profile && handleResetPassword(profile)}
-                  className="inline-flex items-center gap-1 text-[#6B756D] hover:text-[#172017] font-medium"
+                  onClick={() => profile && handleEmailWorkerSheet(profile)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#E9F9EF] hover:bg-[#d5f3e0] text-[#0BAA45] border border-[#16C763]/40 rounded-lg font-bold transition-all"
+                  title="Send work assignment message and CSV lead sheet to this worker email"
                 >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  <span>Reset Password</span>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Email Calling Sheet</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={onNavigateToPerformance}
-                  className="inline-flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-[#E9F9EF] text-[#0BAA45] border border-[#16C763]/40 rounded-lg font-bold transition-all"
-                >
-                  <span>VIEW PERFORMANCE</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => profile && handleResetPassword(profile)}
+                    className="inline-flex items-center gap-1 text-[#6B756D] hover:text-[#172017] font-medium"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    <span>Reset Pass</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onNavigateToPerformance}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white hover:bg-[#E9F9EF] text-[#172017] hover:text-[#0BAA45] border border-[#E5E9E5] rounded-lg font-bold transition-all"
+                  >
+                    <span>Stats</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </Card>
           );
@@ -229,6 +288,14 @@ export const AdminWorkers: React.FC<{ onNavigateToPerformance: () => void }> = (
         }}
         onWorkerAdded={refreshData}
         editingWorker={editingWorker}
+      />
+
+      {/* Email Dispatches Audit Modal */}
+      <EmailDispatchModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        dispatches={emailDispatches}
+        onRefresh={refreshData}
       />
     </div>
   );

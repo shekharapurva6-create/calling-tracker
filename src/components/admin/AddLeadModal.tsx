@@ -73,7 +73,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
 
     setTimeout(() => {
       try {
-        dataStore.createLead({
+        const result = dataStore.createLead({
           clientName: clientName.trim(),
           businessName: businessName.trim() || undefined,
           phoneNumber: cleanPhone,
@@ -83,9 +83,20 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
           priority,
           notes: notes.trim() || undefined,
           status: 'NEW',
+          sendEmailSheet: true,
         });
 
-        showToast('Lead added successfully', 'success');
+        if (result.emailDispatch) {
+          const selectedWorker = workers.find((w) => w.id === assignedWorkerId);
+          showToast(
+            `✓ Lead added & sent sheet to ${selectedWorker?.email || 'worker'}`,
+            'success',
+            'Lead & Email Dispatched'
+          );
+        } else {
+          showToast('Lead added successfully', 'success');
+        }
+
         onLeadAdded();
         handleClose();
       } catch (err: any) {
@@ -220,6 +231,11 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
               </option>
             ))}
           </select>
+          {assignedWorkerId && (
+            <div className="mt-2 p-2.5 bg-[#E9F9EF] rounded-xl border border-[#16C763]/30 text-[11px] text-[#0BAA45] font-semibold flex items-center gap-1.5">
+              <span>📧 Automated notification email & CSV lead sheet will be sent to the assigned worker's inbox.</span>
+            </div>
+          )}
         </div>
 
         {/* Notes */}

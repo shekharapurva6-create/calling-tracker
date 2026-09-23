@@ -149,3 +149,18 @@ export interface TelephonyCallSession {
   endTime?: number;
   durationSeconds: number;
 }
+
+export interface EmailDispatchLog {
+  id: string;
+  workerId: string;
+  workerName: string;
+  workerEmail: string;
+  subject: string;
+  messageBody: string;
+  leadsCount: number;
+  leadNames: string[];
+  csvFilename: string;
+  csvContent: string;
+  sentAt: string;
+  status: 'DELIVERED' | 'SENT';
+}

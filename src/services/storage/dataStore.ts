@@ -4,9 +4,9 @@ import {
   CallLog,
   FollowUp,
   WorkerPerformance,
-  DailyTarget,
   LeadStatus,
   CallStatus,
+  EmailDispatchLog,
 } from '../../types';
 
 const STORAGE_KEYS = {
@@ -17,10 +17,18 @@ const STORAGE_KEYS = {
   TARGETS: 'nexgenai_daily_targets_v1',
   SETTINGS: 'nexgenai_settings_v1',
   CURRENT_USER: 'nexgenai_current_user_v1',
+  EMAIL_DISPATCHES: 'nexgenai_email_dispatches_v1',
 };
 
 // Listeners for realtime reactive updates across components
-type EventType = 'LEAD_UPDATED' | 'CALL_LOGGED' | 'TARGET_UPDATED' | 'WORKER_UPDATED' | 'FOLLOWUP_UPDATED';
+type EventType =
+  | 'LEAD_UPDATED'
+  | 'CALL_LOGGED'
+  | 'TARGET_UPDATED'
+  | 'WORKER_UPDATED'
+  | 'FOLLOWUP_UPDATED'
+  | 'EMAIL_DISPATCHED';
+
 type EventListener = (event: { type: EventType; payload?: any }) => void;
 const listeners = new Set<EventListener>();
 
@@ -78,8 +86,8 @@ const DEFAULT_PROFILES: UserProfile[] = [
   },
 ];
 
+// Initial leads (Unassigned by default so admin can assign and test automatic email & sheet dispatch)
 const DEFAULT_LEADS: Lead[] = [
-  // Rahul's Leads (10 leads)
   {
     id: 'lead_1',
     clientName: 'Raj Kumar',
@@ -90,8 +98,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'HIGH',
     notes: 'Inquiring about telecaller automation software.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -105,9 +113,9 @@ const DEFAULT_LEADS: Lead[] = [
     businessType: 'Health & Fitness',
     priority: 'MEDIUM',
     notes: 'Interested in gym member renewal calling.',
-    status: 'CALLED',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    status: 'NEW',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -121,9 +129,9 @@ const DEFAULT_LEADS: Lead[] = [
     businessType: 'Hospitality',
     priority: 'HIGH',
     notes: 'Wants bulk booking inquiries handled.',
-    status: 'CONNECTED',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    status: 'NEW',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -136,10 +144,10 @@ const DEFAULT_LEADS: Lead[] = [
     city: 'Darbhanga',
     businessType: 'Healthcare',
     priority: 'URGENT',
-    notes: 'Follow up at 3:00 PM for software pricing.',
-    status: 'FOLLOW-UP',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    notes: 'Follow up for telecaller software pricing.',
+    status: 'NEW',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -154,8 +162,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'LOW',
     notes: 'General store inventory management inquiry.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -170,8 +178,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'HIGH',
     notes: 'School admission leads telecalling.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -186,8 +194,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'MEDIUM',
     notes: 'Vehicle servicing reminders.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -202,8 +210,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'LOW',
     notes: 'Festival discount campaign calls.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -218,8 +226,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'HIGH',
     notes: 'Pathology test booking confirmation.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -234,14 +242,12 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'MEDIUM',
     notes: 'Fleet booking verification.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_rahul',
-    assignedWorkerName: 'Rahul Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
-
-  // Aman's Leads (10 leads)
   {
     id: 'lead_11',
     clientName: 'Rajesh Khanna',
@@ -252,8 +258,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'HIGH',
     notes: 'Catering inquiries setup.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -268,8 +274,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'MEDIUM',
     notes: 'Dental appointment schedule software.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -283,9 +289,9 @@ const DEFAULT_LEADS: Lead[] = [
     businessType: 'Hospitality',
     priority: 'HIGH',
     notes: 'Table reservation follow up system.',
-    status: 'CONNECTED',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    status: 'NEW',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -300,8 +306,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'LOW',
     notes: 'Bridal package queries.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -316,8 +322,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'MEDIUM',
     notes: 'Wholesale fertilizer buyer leads.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -331,9 +337,9 @@ const DEFAULT_LEADS: Lead[] = [
     businessType: 'Hospitality',
     priority: 'HIGH',
     notes: 'Weekend getaway packages.',
-    status: 'FOLLOW-UP',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    status: 'NEW',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -348,8 +354,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'URGENT',
     notes: 'Diwali electronics offers promo calls.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -364,8 +370,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'MEDIUM',
     notes: 'Driver training inquiry.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -380,8 +386,8 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'HIGH',
     notes: 'Wedding saree customer outreach.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -396,123 +402,9 @@ const DEFAULT_LEADS: Lead[] = [
     priority: 'LOW',
     notes: 'Bulk paint dealer inquiries.',
     status: 'NEW',
-    assignedWorkerId: 'usr_worker_aman',
-    assignedWorkerName: 'Aman Kumar',
+    assignedWorkerId: undefined,
+    assignedWorkerName: undefined,
     createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
-
-// Generate realistic call logs for today to match the prompt's stats
-// (Rahul: 12 calls today, 8 connected, 3 remaining / target 15)
-// (Aman: 15 calls today, 11 connected, Target completed / target 15)
-function generateInitialCallLogs(): CallLog[] {
-  const logs: CallLog[] = [];
-  const today = new Date().toISOString().split('T')[0];
-
-  // Rahul Kumar calls (12 calls, 8 connected, 2 no answer, 1 busy, 1 failed)
-  const rahulCalls = [
-    { client: 'ABC Coaching', bus: 'ABC Coaching', phone: '+91 98234 11021', status: 'CONNECTED' as CallStatus, dur: 161, time: '10:42 AM', leadId: 'lead_1' },
-    { client: 'Priya Sharma', bus: 'Apex Fitness Gym', phone: '+91 98112 33445', status: 'CONNECTED' as CallStatus, dur: 84, time: '10:55 AM', leadId: 'lead_2' },
-    { client: 'Vikram Verma', bus: 'Royal Stay Hotel', phone: '+91 98456 77889', status: 'CONNECTED' as CallStatus, dur: 215, time: '11:15 AM', leadId: 'lead_3' },
-    { client: 'Sunita Patel', bus: 'Modern Diagnostic Center', phone: '+91 98771 22334', status: 'CONNECTED' as CallStatus, dur: 140, time: '11:38 AM', leadId: 'lead_4' },
-    { client: 'Amit Mishra', bus: 'Mishra Supermarket', phone: '+91 98334 55667', status: 'NO_ANSWER' as CallStatus, dur: 0, time: '12:05 PM', leadId: 'lead_5' },
-    { client: 'Neha Gupta', bus: 'Bright Future Public School', phone: '+91 98667 88990', status: 'CONNECTED' as CallStatus, dur: 195, time: '12:30 PM', leadId: 'lead_6' },
-    { client: 'Deepak Singh', bus: 'Singh Automobiles', phone: '+91 98223 44556', status: 'BUSY' as CallStatus, dur: 0, time: '01:10 PM', leadId: 'lead_7' },
-    { client: 'Anjali Roy', bus: 'Roy Fashion Boutique', phone: '+91 98556 77889', status: 'CONNECTED' as CallStatus, dur: 110, time: '02:00 PM', leadId: 'lead_8' },
-    { client: 'Sanjay Yadav', bus: 'Star Diagnostic Lab', phone: '+91 98119 88776', status: 'CONNECTED' as CallStatus, dur: 175, time: '02:45 PM', leadId: 'lead_9' },
-    { client: 'Manoj Kumar', bus: 'Express Logistics Hub', phone: '+91 98443 22110', status: 'NO_ANSWER' as CallStatus, dur: 0, time: '03:15 PM', leadId: 'lead_10' },
-    { client: 'Raj Kumar', bus: 'ABC Coaching', phone: '+91 98234 11021', status: 'CONNECTED' as CallStatus, dur: 130, time: '03:50 PM', leadId: 'lead_1' },
-    { client: 'Deepak Singh', bus: 'Singh Automobiles', phone: '+91 98223 44556', status: 'FAILED' as CallStatus, dur: 0, time: '04:10 PM', leadId: 'lead_7' },
-  ];
-
-  rahulCalls.forEach((c, idx) => {
-    logs.push({
-      id: `log_rahul_${idx + 1}`,
-      leadId: c.leadId,
-      workerId: 'usr_worker_rahul',
-      workerName: 'Rahul Kumar',
-      clientName: c.client,
-      businessName: c.bus,
-      phoneNumber: c.phone,
-      providerCallId: `sim_rahul_${idx + 1}`,
-      status: c.status,
-      startedAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 7) % 60}:00.000Z`,
-      answeredAt: c.status === 'CONNECTED' ? `${today}T${10 + Math.floor(idx / 2)}:${(idx * 7) % 60}:04.000Z` : undefined,
-      endedAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 7) % 60}:${c.dur % 60}.000Z`,
-      durationSeconds: c.dur,
-      createdAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 7) % 60}:00.000Z`,
-    });
-  });
-
-  // Aman Kumar calls (15 calls, 11 connected, 4 not connected)
-  const amanCalls = [
-    { client: 'XYZ Hotel', bus: 'XYZ Hotel', phone: '+91 97XXXXXX82', status: 'NO_ANSWER' as CallStatus, dur: 0, time: '10:31 AM', leadId: 'lead_13' },
-    { client: 'Rajesh Khanna', bus: 'Khanna Sweet House', phone: '+91 97112 33445', status: 'CONNECTED' as CallStatus, dur: 145, time: '10:45 AM', leadId: 'lead_11' },
-    { client: 'Pooja Mehra', bus: 'Mehra Dental Clinic', phone: '+91 97223 44556', status: 'CONNECTED' as CallStatus, dur: 190, time: '11:00 AM', leadId: 'lead_12' },
-    { client: 'Arvind Swaminathan', bus: 'South Flavors Restaurant', phone: '+91 97334 55667', status: 'CONNECTED' as CallStatus, dur: 230, time: '11:20 AM', leadId: 'lead_13' },
-    { client: 'Kavita Desai', bus: 'Sparkle Beauty Parlour', phone: '+91 97445 66778', status: 'CONNECTED' as CallStatus, dur: 95, time: '11:45 AM', leadId: 'lead_14' },
-    { client: 'Ramesh Kulkarni', bus: 'Kulkarni Agro Traders', phone: '+91 97556 77889', status: 'BUSY' as CallStatus, dur: 0, time: '12:15 PM', leadId: 'lead_15' },
-    { client: 'Farhan Akhtar', bus: 'Green View Resort', phone: '+91 97667 88990', status: 'CONNECTED' as CallStatus, dur: 180, time: '12:40 PM', leadId: 'lead_16' },
-    { client: 'Sneha Reddy', bus: 'Reddy Electronics Showroom', phone: '+91 97778 99001', status: 'CONNECTED' as CallStatus, dur: 210, time: '01:30 PM', leadId: 'lead_17' },
-    { client: 'Gurpreet Singh', bus: 'Singh Driving School', phone: '+91 97889 00112', status: 'CONNECTED' as CallStatus, dur: 120, time: '02:10 PM', leadId: 'lead_18' },
-    { client: 'Meenakshi Sundaram', bus: 'Chennai Silk Palace', phone: '+91 97990 11223', status: 'CONNECTED' as CallStatus, dur: 160, time: '02:40 PM', leadId: 'lead_19' },
-    { client: 'Tarun Sen', bus: 'Sen Hardware & Paints', phone: '+91 97001 22334', status: 'NO_ANSWER' as CallStatus, dur: 0, time: '03:00 PM', leadId: 'lead_20' },
-    { client: 'Rajesh Khanna', bus: 'Khanna Sweet House', phone: '+91 97112 33445', status: 'CONNECTED' as CallStatus, dur: 140, time: '03:30 PM', leadId: 'lead_11' },
-    { client: 'Pooja Mehra', bus: 'Mehra Dental Clinic', phone: '+91 97223 44556', status: 'BUSY' as CallStatus, dur: 0, time: '03:55 PM', leadId: 'lead_12' },
-    { client: 'Farhan Akhtar', bus: 'Green View Resort', phone: '+91 97667 88990', status: 'CONNECTED' as CallStatus, dur: 175, time: '04:15 PM', leadId: 'lead_16' },
-    { client: 'Sneha Reddy', bus: 'Reddy Electronics Showroom', phone: '+91 97778 99001', status: 'CONNECTED' as CallStatus, dur: 195, time: '04:40 PM', leadId: 'lead_17' },
-  ];
-
-  amanCalls.forEach((c, idx) => {
-    logs.push({
-      id: `log_aman_${idx + 1}`,
-      leadId: c.leadId,
-      workerId: 'usr_worker_aman',
-      workerName: 'Aman Kumar',
-      clientName: c.client,
-      businessName: c.bus,
-      phoneNumber: c.phone,
-      providerCallId: `sim_aman_${idx + 1}`,
-      status: c.status,
-      startedAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 8) % 60}:00.000Z`,
-      answeredAt: c.status === 'CONNECTED' ? `${today}T${10 + Math.floor(idx / 2)}:${(idx * 8) % 60}:03.000Z` : undefined,
-      endedAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 8) % 60}:${c.dur % 60}.000Z`,
-      durationSeconds: c.dur,
-      createdAt: `${today}T${10 + Math.floor(idx / 2)}:${(idx * 8) % 60}:00.000Z`,
-    });
-  });
-
-  return logs;
-}
-
-const DEFAULT_FOLLOW_UPS: FollowUp[] = [
-  {
-    id: 'fup_1',
-    leadId: 'lead_4',
-    clientName: 'Sunita Patel',
-    businessName: 'Modern Diagnostic Center',
-    phoneNumber: '+91 98771 22334',
-    workerId: 'usr_worker_rahul',
-    workerName: 'Rahul Kumar',
-    followUpAt: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
-    note: 'Call to confirm telecaller package demo and price discount.',
-    status: 'PENDING',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'fup_2',
-    leadId: 'lead_16',
-    clientName: 'Farhan Akhtar',
-    businessName: 'Green View Resort',
-    phoneNumber: '+91 97667 88990',
-    workerId: 'usr_worker_aman',
-    workerName: 'Aman Kumar',
-    followUpAt: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
-    note: 'Follow up regarding customized caller dashboard for hospitality.',
-    status: 'PENDING',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -523,6 +415,7 @@ export interface SystemSettings {
   defaultDailyTarget: number;
   timezone: string;
   telephonyProvider: 'MOCK' | 'PRODUCTION';
+  autoEmailDispatchOnAssignment: boolean;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -530,6 +423,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   defaultDailyTarget: 15,
   timezone: 'Asia/Kolkata',
   telephonyProvider: 'MOCK',
+  autoEmailDispatchOnAssignment: true,
 };
 
 // Data Store Class
@@ -538,8 +432,8 @@ class DataStore {
   private leads: Lead[] = [];
   private callLogs: CallLog[] = [];
   private followUps: FollowUp[] = [];
-  private targets: Record<string, number> = {};
   private settings: SystemSettings = DEFAULT_SETTINGS;
+  private emailDispatches: EmailDispatchLog[] = [];
 
   constructor() {
     this.loadFromStorage();
@@ -554,13 +448,16 @@ class DataStore {
       this.leads = l ? JSON.parse(l) : DEFAULT_LEADS;
 
       const c = localStorage.getItem(STORAGE_KEYS.CALL_LOGS);
-      this.callLogs = c ? JSON.parse(c) : generateInitialCallLogs();
+      this.callLogs = c ? JSON.parse(c) : [];
 
       const f = localStorage.getItem(STORAGE_KEYS.FOLLOW_UPS);
-      this.followUps = f ? JSON.parse(f) : DEFAULT_FOLLOW_UPS;
+      this.followUps = f ? JSON.parse(f) : [];
 
       const s = localStorage.getItem(STORAGE_KEYS.SETTINGS);
       this.settings = s ? JSON.parse(s) : DEFAULT_SETTINGS;
+
+      const e = localStorage.getItem(STORAGE_KEYS.EMAIL_DISPATCHES);
+      this.emailDispatches = e ? JSON.parse(e) : [];
 
       // Save defaults if clean
       if (!p) this.saveProfiles();
@@ -568,13 +465,15 @@ class DataStore {
       if (!c) this.saveCallLogs();
       if (!f) this.saveFollowUps();
       if (!s) this.saveSettings();
+      if (!e) this.saveEmailDispatches();
     } catch (err) {
       console.warn('Storage read error, using defaults:', err);
       this.profiles = DEFAULT_PROFILES;
       this.leads = DEFAULT_LEADS;
-      this.callLogs = generateInitialCallLogs();
-      this.followUps = DEFAULT_FOLLOW_UPS;
+      this.callLogs = [];
+      this.followUps = [];
       this.settings = DEFAULT_SETTINGS;
+      this.emailDispatches = [];
     }
   }
 
@@ -592,6 +491,9 @@ class DataStore {
   }
   private saveSettings() {
     localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(this.settings));
+  }
+  private saveEmailDispatches() {
+    localStorage.setItem(STORAGE_KEYS.EMAIL_DISPATCHES, JSON.stringify(this.emailDispatches));
   }
 
   // --- Profiles & Workers ---
@@ -640,6 +542,95 @@ class DataStore {
     return this.updateWorker(id, { isActive: !worker.isActive });
   }
 
+  // --- Automated Email & Sheet Dispatch ---
+  sendAssignmentEmailAndSheet(workerId: string, leadIds: string[]): EmailDispatchLog | null {
+    const worker = this.getProfileById(workerId);
+    if (!worker || !worker.email) return null;
+
+    const assignedLeads = this.leads.filter((l) => leadIds.includes(l.id));
+    if (assignedLeads.length === 0) return null;
+
+    const dateStr = new Date().toLocaleDateString('en-IN', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+    });
+
+    const headers = ['client_name', 'business_name', 'phone_number', 'city', 'business_type', 'priority', 'notes', 'status'];
+    const rows = assignedLeads.map((l) => [
+      `"${l.clientName.replace(/"/g, '""')}"`,
+      `"${(l.businessName || '').replace(/"/g, '""')}"`,
+      `"${l.phoneNumber}"`,
+      `"${(l.city || '').replace(/"/g, '""')}"`,
+      `"${(l.businessType || '').replace(/"/g, '""')}"`,
+      l.priority,
+      `"${(l.notes || '').replace(/"/g, '""')}"`,
+      l.status,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const safeWorkerName = worker.fullName.toLowerCase().replace(/\s+/g, '_');
+    const csvFilename = `nexgenai_assigned_leads_${safeWorkerName}_${Date.now()}.csv`;
+
+    const leadSummaryList = assignedLeads
+      .slice(0, 10)
+      .map((l, i) => `${i + 1}. ${l.clientName} (${l.businessName || 'Direct'}) - ${l.phoneNumber} [${l.priority}]`)
+      .join('\n');
+
+    const extraCount = assignedLeads.length > 10 ? `\n...and ${assignedLeads.length - 10} more leads.` : '';
+
+    const subject = `[NexGenAi] New Lead Assignment & Calling Sheet (${assignedLeads.length} Leads) - ${dateStr}`;
+    const messageBody = `Hello ${worker.fullName},
+
+You have been assigned ${assignedLeads.length} new lead(s) for outbound calling by NexGenAi management.
+
+Please find your telecaller lead sheet attached below:
+Attached File: ${csvFilename}
+
+Assigned Leads Summary:
+----------------------------------------
+${leadSummaryList}${extraCount}
+
+Instructions:
+1. Open your NexGenAi Worker Portal: https://nexgenai.in/worker/login
+2. Click "CALL NOW" on each assigned lead to initiate tracked calling.
+3. Keep track of your daily quota target (${worker.dailyTarget || 15} calls/day).
+
+Best regards,
+NexGenAi Telecaller Operations Team`;
+
+    const dispatchLog: EmailDispatchLog = {
+      id: 'disp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      workerId: worker.id,
+      workerName: worker.fullName,
+      workerEmail: worker.email,
+      subject,
+      messageBody,
+      leadsCount: assignedLeads.length,
+      leadNames: assignedLeads.map((l) => l.clientName),
+      csvFilename,
+      csvContent,
+      sentAt: new Date().toISOString(),
+      status: 'DELIVERED',
+    };
+
+    this.emailDispatches.unshift(dispatchLog);
+    this.saveEmailDispatches();
+    broadcast('EMAIL_DISPATCHED', dispatchLog);
+
+    return dispatchLog;
+  }
+
+  getEmailDispatchLogs(): EmailDispatchLog[] {
+    return [...this.emailDispatches];
+  }
+
+  deleteEmailDispatchLog(id: string) {
+    this.emailDispatches = this.emailDispatches.filter((d) => d.id !== id);
+    this.saveEmailDispatches();
+    broadcast('EMAIL_DISPATCHED', { deletedId: id });
+  }
+
   // --- Leads ---
   getLeads(filterByWorkerId?: string): Lead[] {
     if (filterByWorkerId) {
@@ -652,7 +643,9 @@ class DataStore {
     return this.leads.find((l) => l.id === id);
   }
 
-  createLead(data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'status'> & { status?: LeadStatus }): Lead {
+  createLead(
+    data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'status'> & { status?: LeadStatus; sendEmailSheet?: boolean }
+  ): { lead: Lead; emailDispatch: EmailDispatchLog | null } {
     // Duplicate phone check
     const normalizedPhone = data.phoneNumber.replace(/[\s-]/g, '');
     const exists = this.leads.some((l) => l.phoneNumber.replace(/[\s-]/g, '') === normalizedPhone);
@@ -677,8 +670,14 @@ class DataStore {
 
     this.leads.unshift(newLead);
     this.saveLeads();
+
+    let emailDispatch: EmailDispatchLog | null = null;
+    if (newLead.assignedWorkerId && (data.sendEmailSheet ?? true)) {
+      emailDispatch = this.sendAssignmentEmailAndSheet(newLead.assignedWorkerId, [newLead.id]);
+    }
+
     broadcast('LEAD_UPDATED', newLead);
-    return newLead;
+    return { lead: newLead, emailDispatch };
   }
 
   bulkCreateLeads(newLeads: Array<Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>>): { count: number; leads: Lead[] } {
@@ -702,9 +701,13 @@ class DataStore {
     const idx = this.leads.findIndex((l) => l.id === id);
     if (idx === -1) throw new Error('Lead not found');
 
-    if (updates.assignedWorkerId && updates.assignedWorkerId !== this.leads[idx].assignedWorkerId) {
-      const worker = this.getProfileById(updates.assignedWorkerId);
-      updates.assignedWorkerName = worker?.fullName;
+    if (updates.assignedWorkerId !== undefined && updates.assignedWorkerId !== this.leads[idx].assignedWorkerId) {
+      if (updates.assignedWorkerId) {
+        const worker = this.getProfileById(updates.assignedWorkerId);
+        updates.assignedWorkerName = worker?.fullName;
+      } else {
+        updates.assignedWorkerName = undefined;
+      }
     }
 
     this.leads[idx] = { ...this.leads[idx], ...updates, updatedAt: new Date().toISOString() };
@@ -713,8 +716,53 @@ class DataStore {
     return this.leads[idx];
   }
 
-  assignLead(leadId: string, workerId: string): Lead {
-    return this.updateLead(leadId, { assignedWorkerId: workerId });
+  assignLead(leadId: string, workerId: string, sendEmailSheet = true): { lead: Lead; emailDispatch: EmailDispatchLog | null } {
+    const updated = this.updateLead(leadId, { assignedWorkerId: workerId });
+    let emailDispatch: EmailDispatchLog | null = null;
+    if (workerId && sendEmailSheet) {
+      emailDispatch = this.sendAssignmentEmailAndSheet(workerId, [leadId]);
+    }
+    return { lead: updated, emailDispatch };
+  }
+
+  bulkAssignLeads(leadIds: string[], workerId: string, sendEmailSheet = true): { count: number; emailDispatch: EmailDispatchLog | null } {
+    const worker = this.getProfileById(workerId);
+    if (!worker) throw new Error('Worker not found');
+
+    let count = 0;
+    leadIds.forEach((id) => {
+      const lead = this.getLeadById(id);
+      if (lead) {
+        this.updateLead(id, { assignedWorkerId: workerId, assignedWorkerName: worker.fullName });
+        count++;
+      }
+    });
+
+    let emailDispatch: EmailDispatchLog | null = null;
+    if (count > 0 && sendEmailSheet) {
+      emailDispatch = this.sendAssignmentEmailAndSheet(workerId, leadIds);
+    }
+
+    return { count, emailDispatch };
+  }
+
+  unassignLead(leadId: string): Lead {
+    return this.updateLead(leadId, { assignedWorkerId: undefined, assignedWorkerName: undefined });
+  }
+
+  clearAllAssignments(): number {
+    let count = 0;
+    this.leads.forEach((l) => {
+      if (l.assignedWorkerId) {
+        l.assignedWorkerId = undefined;
+        l.assignedWorkerName = undefined;
+        l.updatedAt = new Date().toISOString();
+        count++;
+      }
+    });
+    this.saveLeads();
+    broadcast('LEAD_UPDATED', null);
+    return count;
   }
 
   deleteLead(id: string): void {
@@ -748,7 +796,7 @@ class DataStore {
       let nextStatus: LeadStatus = 'CALLED';
       if (log.status === 'CONNECTED') nextStatus = 'CONNECTED';
       if (log.outcome) nextStatus = log.outcome;
-      
+
       const lead = this.getLeadById(log.leadId);
       if (lead) {
         this.updateLead(log.leadId, { status: nextStatus });
@@ -810,7 +858,6 @@ class DataStore {
     const targetDate = dateStr || new Date().toISOString().split('T')[0];
     const dailyTarget = worker.dailyTarget || this.settings.defaultDailyTarget || 15;
 
-    // Filter calls for this worker today (both created_at and started_at check)
     const calls = this.callLogs.filter((c) => {
       const callDate = (c.startedAt || c.createdAt).split('T')[0];
       return c.workerId === workerId && callDate === targetDate;
@@ -823,7 +870,7 @@ class DataStore {
     const failedToday = calls.filter((c) => c.status === 'FAILED').length;
     const remainingCalls = Math.max(0, dailyTarget - callsToday);
     const connectionRate = callsToday > 0 ? Number(((connectedToday / callsToday) * 100).toFixed(1)) : 0;
-    
+
     const connectedCalls = calls.filter((c) => c.status === 'CONNECTED' && c.durationSeconds > 0);
     const totalDuration = connectedCalls.reduce((acc, curr) => acc + curr.durationSeconds, 0);
     const avgDurationSeconds = connectedCalls.length > 0 ? Math.round(totalDuration / connectedCalls.length) : 0;
@@ -856,7 +903,6 @@ class DataStore {
     const today = new Date().toISOString().split('T')[0];
     const totalLeads = this.leads.length;
 
-    // Calls today across all workers
     const callsTodayList = this.callLogs.filter((c) => {
       const cDate = (c.startedAt || c.createdAt).split('T')[0];
       return cDate === today;
@@ -864,8 +910,6 @@ class DataStore {
 
     const callsToday = callsTodayList.length;
     const connectedToday = callsTodayList.filter((c) => c.status === 'CONNECTED').length;
-
-    // Pending leads (NEW status or uncalled)
     const pendingCalls = this.leads.filter((l) => l.status === 'NEW').length;
 
     return {
@@ -894,6 +938,7 @@ class DataStore {
     localStorage.removeItem(STORAGE_KEYS.CALL_LOGS);
     localStorage.removeItem(STORAGE_KEYS.FOLLOW_UPS);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
+    localStorage.removeItem(STORAGE_KEYS.EMAIL_DISPATCHES);
     this.loadFromStorage();
     broadcast('LEAD_UPDATED', null);
   }

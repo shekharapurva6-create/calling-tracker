@@ -5,25 +5,31 @@ import { LeadStatusBadge, PriorityBadge } from '../../components/common/Badge';
 import { AddLeadModal } from '../../components/admin/AddLeadModal';
 import { CsvImportModal } from '../../components/admin/CsvImportModal';
 import { AssignWorkerModal } from '../../components/admin/AssignWorkerModal';
+import { EmailDispatchModal } from '../../components/admin/EmailDispatchModal';
 import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
-import { Lead, LeadStatus, UserProfile } from '../../types';
+import { Lead, UserProfile, EmailDispatchLog } from '../../types';
 import {
   Plus,
   Upload,
   Download,
   Search,
   UserCheck,
+  UserX,
   Trash2,
-  MapPin,
-  Building2,
-  Phone,
   Filter,
+  Mail,
+  Send,
+  RefreshCw,
+  Sparkles,
 } from 'lucide-react';
 import { showToast } from '../../components/common/Toast';
 
 export const AdminLeads: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>(() => dataStore.getLeads());
   const [workers, setWorkers] = useState<UserProfile[]>(() => dataStore.getWorkers());
+  const [emailDispatches, setEmailDispatches] = useState<EmailDispatchLog[]>(() =>
+    dataStore.getEmailDispatchLogs()
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<
     'ALL' | 'UNASSIGNED' | 'ASSIGNED' | 'CALLED' | 'FOLLOW-UP' | 'CONVERTED'
@@ -32,11 +38,13 @@ export const AdminLeads: React.FC = () => {
   // Modals state
   const [isAddLeadOpen, setIsAddLeadOpen] = useState(false);
   const [isCsvImportOpen, setIsCsvImportOpen] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [assignModalLead, setAssignModalLead] = useState<Lead | null>(null);
 
   const refreshData = () => {
     setLeads(dataStore.getLeads());
     setWorkers(dataStore.getWorkers());
+    setEmailDispatches(dataStore.getEmailDispatchLogs());
   };
 
   useEffect(() => {
@@ -48,7 +56,6 @@ export const AdminLeads: React.FC = () => {
 
   // Filter & Search Logic
   const filteredLeads = leads.filter((lead) => {
-    // Search query
     const q = searchQuery.toLowerCase().trim();
     const matchesSearch =
       !q ||
@@ -60,7 +67,6 @@ export const AdminLeads: React.FC = () => {
 
     if (!matchesSearch) return false;
 
-    // Filter pill
     if (activeFilter === 'ALL') return true;
     if (activeFilter === 'UNASSIGNED') return !lead.assignedWorkerId;
     if (activeFilter === 'ASSIGNED') return !!lead.assignedWorkerId;
@@ -75,6 +81,34 @@ export const AdminLeads: React.FC = () => {
     if (window.confirm(`Are you sure you want to delete lead "${name}"?`)) {
       dataStore.deleteLead(id);
       showToast('Lead deleted successfully', 'info');
+      refreshData();
+    }
+  };
+
+  const handleUnassignSingleLead = (lead: Lead) => {
+    dataStore.unassignLead(lead.id);
+    showToast(`Removed assignment for ${lead.clientName}`, 'info');
+    refreshData();
+  };
+
+  const handleClearAllAssignments = () => {
+    if (window.confirm('Remove worker assignments from ALL leads? This will make all leads unassigned.')) {
+      const count = dataStore.clearAllAssignments();
+      showToast(`✓ Cleared assignments from ${count} leads`, 'success');
+      refreshData();
+    }
+  };
+
+  const handleSendLeadSheet = (lead: Lead) => {
+    if (!lead.assignedWorkerId) return;
+    const worker = workers.find((w) => w.id === lead.assignedWorkerId);
+    const dispatch = dataStore.sendAssignmentEmailAndSheet(lead.assignedWorkerId, [lead.id]);
+    if (dispatch) {
+      showToast(
+        `📧 Dispatched assignment sheet to ${worker?.email || 'worker'}`,
+        'success',
+        'Email & Sheet Dispatched'
+      );
       refreshData();
     }
   };
@@ -132,6 +166,9 @@ export const AdminLeads: React.FC = () => {
     { id: 'CONVERTED', label: 'Converted' },
   ];
 
+  const assignedCount = leads.filter((l) => !!l.assignedWorkerId).length;
+  const unassignedCount = leads.length - assignedCount;
+
   return (
     <div className="space-y-5 animate-in fade-in duration-200">
       {/* Header with Actions */}
@@ -139,11 +176,36 @@ export const AdminLeads: React.FC = () => {
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-[#172017] tracking-tight">Leads</h1>
           <p className="text-sm text-[#6B756D] mt-0.5">
-            Manage, assign, and import telecaller calling database ({leads.length} total)
+            Manage telecaller leads database • <strong className="text-[#0BAA45]">{unassignedCount} Unassigned</strong>, {assignedCount} Assigned
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Automated Dispatches Viewer */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setIsEmailModalOpen(true)}
+            icon={<Mail className="w-3.5 h-3.5 text-[#0BAA45]" />}
+          >
+            Dispatched Emails & Sheets ({emailDispatches.length})
+          </Button>
+
+          {/* Clear / Unassign All */}
+          {assignedCount > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleClearAllAssignments}
+              icon={<UserX className="w-3.5 h-3.5 text-[#DC2626]" />}
+              className="text-[#DC2626] hover:bg-[#FEE2E2]/50 border-[#FECACA]"
+            >
+              Clear Assignments
+            </Button>
+          )}
+
           <Button
             type="button"
             variant="outline"
@@ -153,6 +215,7 @@ export const AdminLeads: React.FC = () => {
           >
             Export CSV
           </Button>
+
           <Button
             type="button"
             variant="secondary"
@@ -162,6 +225,7 @@ export const AdminLeads: React.FC = () => {
           >
             Import CSV
           </Button>
+
           <Button
             type="button"
             variant="primary"
@@ -176,7 +240,6 @@ export const AdminLeads: React.FC = () => {
 
       {/* Search & Filter Controls */}
       <Card className="p-4 space-y-3.5">
-        {/* Search Bar */}
         <div className="relative">
           <Search className="w-4 h-4 text-[#6B756D] absolute left-3.5 top-3.5" />
           <input
@@ -250,15 +313,25 @@ export const AdminLeads: React.FC = () => {
                     </td>
                     <td className="py-3 px-4">
                       {lead.assignedWorkerName ? (
-                        <button
-                          type="button"
-                          onClick={() => setAssignModalLead(lead)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#E9F9EF] hover:bg-[#d5f3e0] text-[#0BAA45] rounded-lg text-xs font-bold transition-colors border border-[#16C763]/30"
-                          title="Click to Reassign"
-                        >
-                          <UserCheck className="w-3.5 h-3.5" />
-                          <span>{lead.assignedWorkerName}</span>
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setAssignModalLead(lead)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[#E9F9EF] hover:bg-[#d5f3e0] text-[#0BAA45] rounded-lg text-xs font-bold transition-colors border border-[#16C763]/30"
+                            title="Click to Reassign or Email Sheet"
+                          >
+                            <UserCheck className="w-3.5 h-3.5" />
+                            <span>{lead.assignedWorkerName}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleSendLeadSheet(lead)}
+                            className="p-1 text-[#6B756D] hover:text-[#0BAA45] hover:bg-[#E9F9EF] rounded-md transition-colors"
+                            title="Dispatched Email & Sheet"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       ) : (
                         <button
                           type="button"
@@ -285,6 +358,16 @@ export const AdminLeads: React.FC = () => {
                         >
                           <UserCheck className="w-4 h-4" />
                         </button>
+                        {lead.assignedWorkerId && (
+                          <button
+                            type="button"
+                            onClick={() => handleUnassignSingleLead(lead)}
+                            className="p-1.5 text-[#6B756D] hover:text-[#DC2626] hover:bg-[#FEE2E2]/50 rounded-lg transition-colors"
+                            title="Unassign Worker"
+                          >
+                            <UserX className="w-4 h-4" />
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleDeleteLead(lead.id, lead.clientName)}
@@ -323,6 +406,13 @@ export const AdminLeads: React.FC = () => {
         onClose={() => setAssignModalLead(null)}
         workers={workers}
         onAssigned={refreshData}
+      />
+
+      <EmailDispatchModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+        dispatches={emailDispatches}
+        onRefresh={refreshData}
       />
     </div>
   );
