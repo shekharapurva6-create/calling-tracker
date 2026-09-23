@@ -1,0 +1,98 @@
+@import "tailwindcss";
+@config "../tailwind.config.js";
+
+:root {
+  --brand-primary: #0BAA45;
+  --brand-secondary: #16C763;
+  --brand-light: #E9F9EF;
+  --brand-bg: #F7F8F6;
+  --brand-white: #FFFFFF;
+  --brand-text: #172017;
+  --brand-muted: #6B756D;
+  --brand-border: #E5E9E5;
+  --brand-danger: #E53935;
+  --brand-warning: #F59E0B;
+  --brand-success: #16A34A;
+}
+
+body {
+  background-color: var(--brand-bg);
+  color: var(--brand-text);
+  font-family: 'Outfit', 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #D1D5DB;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9CA3AF;
+}
+
+.btn-call-now {
+  height: 54px;
+  min-height: 52px;
+  background-color: #0BAA45;
+  color: #FFFFFF;
+  font-weight: 700;
+  font-size: 1rem;
+  border-radius: 0.75rem;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.nexgen-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E5E9E5;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+}
+
+.nexgen-input {
+  width: 100%;
+  padding: 0.625rem 0.875rem;
+  background-color: #FFFFFF;
+  border: 1px solid #E5E9E5;
+  border-radius: 0.75rem;
+  color: #172017;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+}
+
+.nexgen-input:focus {
+  outline: none;
+  border-color: #0BAA45;
+  box-shadow: 0 0 0 3px rgba(11, 170, 69, 0.2);
+}
+
+/* Pulse animation for call ring */
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(22, 199, 99, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 16px rgba(22, 199, 99, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(22, 199, 99, 0);
+  }
+}
+
+.animate-pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
