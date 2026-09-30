@@ -2,20 +2,23 @@ import React, { useState, useEffect } from 'react';
 import { WorkerLeadCard } from '../../components/worker/WorkerLeadCard';
 import { Card } from '../../components/common/Card';
 import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
-import { Lead, LeadPriority, LeadStatus } from '../../types';
+import { Lead } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { Search, Filter, PhoneCall } from 'lucide-react';
+import { Search, PhoneCall } from 'lucide-react';
 
 export const WorkerLeads: React.FC = () => {
-  const { user } = useAuth();
-  const workerId = user?.id || 'usr_worker_rahul';
+  const { user, currentWorkerId } = useAuth();
+  const workerId = currentWorkerId || user?.id || '';
 
-  const [leads, setLeads] = useState<Lead[]>(() => dataStore.getLeads(workerId));
+  const [leads, setLeads] = useState<Lead[]>(() =>
+    workerId ? dataStore.getLeads(workerId) : []
+  );
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [priorityFilter, setPriorityFilter] = useState<string>('ALL');
 
   const refreshData = () => {
+    if (!workerId) return;
     setLeads(dataStore.getLeads(workerId));
   };
 
@@ -26,6 +29,10 @@ export const WorkerLeads: React.FC = () => {
     });
     return () => unsubscribe();
   }, [workerId]);
+
+  if (!workerId) {
+    return null;
+  }
 
   const filteredLeads = leads.filter((lead) => {
     const q = searchQuery.toLowerCase().trim();

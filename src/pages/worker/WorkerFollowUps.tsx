@@ -1,20 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '../../components/common/Card';
-import { Button } from '../../components/common/Button';
 import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
 import { FollowUp } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTelephony } from '../../contexts/TelephonyContext';
-import { Clock, Calendar, Phone, CheckCircle2, User } from 'lucide-react';
+import { Clock, Calendar, Phone } from 'lucide-react';
 
 export const WorkerFollowUps: React.FC = () => {
-  const { user } = useAuth();
+  const { user, currentWorkerId } = useAuth();
   const { initiateCall } = useTelephony();
-  const workerId = user?.id || 'usr_worker_rahul';
+  const workerId = currentWorkerId || user?.id || '';
 
-  const [followUps, setFollowUps] = useState<FollowUp[]>(() => dataStore.getFollowUps(workerId));
+  const [followUps, setFollowUps] = useState<FollowUp[]>(() =>
+    workerId ? dataStore.getFollowUps(workerId) : []
+  );
 
   const refreshData = () => {
+    if (!workerId) return;
     setFollowUps(dataStore.getFollowUps(workerId));
   };
 
@@ -25,6 +27,10 @@ export const WorkerFollowUps: React.FC = () => {
     });
     return () => unsubscribe();
   }, [workerId]);
+
+  if (!workerId) {
+    return null;
+  }
 
   const handleCallFollowUp = (fup: FollowUp) => {
     const lead = dataStore.getLeadById(fup.leadId);

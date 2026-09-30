@@ -6,30 +6,45 @@ import { ShieldCheck, Lock, Mail, ArrowRight } from 'lucide-react';
 export const AdminLogin: React.FC<{ onNavigateToWorkerLogin: () => void }> = ({
   onNavigateToWorkerLogin,
 }) => {
-  const { login, quickLogin } = useAuth();
-  const [email, setEmail] = useState('admin@nexgenai.in');
-  const [password, setPassword] = useState('••••••••');
+  const { login } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!email.trim()) {
+      setError('Please enter your administrator email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your admin password.');
+      return;
+    }
+
     setIsLoading(true);
 
-    setTimeout(async () => {
-      const success = await login(email, 'ADMIN');
-      if (!success) {
-        setError('Invalid admin credentials. Use admin@nexgenai.in');
+    try {
+      const result = await login(email, password, 'ADMIN');
+      if (!result.success) {
+        setError(
+          result.error ||
+            'Invalid admin credentials or unauthorized account.'
+        );
       }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred during authentication.');
+    } finally {
       setIsLoading(false);
-    }, 400);
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#F7F8F6] flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-3xl border border-[#E5E9E5] shadow-card p-6 sm:p-8">
-        
         {/* Brand Header */}
         <div className="text-center mb-8">
           <div className="w-12 h-12 rounded-2xl bg-[#0BAA45] text-white flex items-center justify-center font-black text-2xl mx-auto shadow-sm mb-3">
@@ -53,14 +68,14 @@ export const AdminLogin: React.FC<{ onNavigateToWorkerLogin: () => void }> = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-bold text-[#172017] uppercase tracking-wider mb-1.5">
-              Email
+              Admin Email
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-[#6B756D] absolute left-3.5 top-3.5" />
               <input
                 type="email"
                 required
-                placeholder="admin@nexgenai.in"
+                placeholder="admin@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="nexgen-input pl-10 h-11"
@@ -103,32 +118,20 @@ export const AdminLogin: React.FC<{ onNavigateToWorkerLogin: () => void }> = ({
         {/* Small text notice */}
         <div className="mt-6 text-center">
           <p className="text-xs text-[#6B756D] font-medium">
-            Secure internal access • NexGenAi
+            Authorized administrator access only • NexGenAi
           </p>
         </div>
 
-        {/* Demo Fast Fill Pill */}
+        {/* Switch to Worker Link */}
         <div className="mt-6 pt-5 border-t border-[#E5E9E5] bg-[#F7F8F6] -mx-6 -mb-6 p-4 rounded-b-3xl text-center">
-          <div className="text-[11px] text-[#6B756D] mb-2 font-medium">Quick Demo Testing Access</div>
           <button
             type="button"
-            onClick={() => quickLogin('usr_admin_1')}
-            className="w-full py-2 bg-white hover:bg-[#E9F9EF] text-[#0BAA45] border border-[#16C763]/40 rounded-xl text-xs font-bold transition-all shadow-2xs flex items-center justify-center gap-1.5"
+            onClick={onNavigateToWorkerLogin}
+            className="text-xs text-[#6B756D] hover:text-[#0BAA45] font-semibold underline underline-offset-2 transition-colors"
           >
-            ⚡ 1-Click Login as Admin (admin@nexgenai.in)
+            Are you a Telecaller? Switch to Worker Portal →
           </button>
-
-          <div className="mt-3">
-            <button
-              type="button"
-              onClick={onNavigateToWorkerLogin}
-              className="text-xs text-[#6B756D] hover:text-[#0BAA45] font-semibold underline underline-offset-2 transition-colors"
-            >
-              Are you a Telecaller? Switch to Worker Portal →
-            </button>
-          </div>
         </div>
-
       </div>
     </div>
   );

@@ -7,17 +7,26 @@ import {
   LeadStatus,
   CallStatus,
   EmailDispatchLog,
+  AppNotification,
+  AssignmentNotificationLog,
+  NotificationSettings,
 } from '../../types';
+import {
+  getAuthorizedAdminEmails,
+  isAuthorizedAdminEmail,
+} from '../supabase/supabaseClient';
 
 const STORAGE_KEYS = {
-  PROFILES: 'nexgenai_profiles_v1',
-  LEADS: 'nexgenai_leads_v1',
-  CALL_LOGS: 'nexgenai_call_logs_v1',
-  FOLLOW_UPS: 'nexgenai_follow_ups_v1',
-  TARGETS: 'nexgenai_daily_targets_v1',
-  SETTINGS: 'nexgenai_settings_v1',
-  CURRENT_USER: 'nexgenai_current_user_v1',
-  EMAIL_DISPATCHES: 'nexgenai_email_dispatches_v1',
+  PROFILES: 'nexgenai_profiles_v4',
+  CREDENTIALS: 'nexgenai_worker_creds_v4',
+  LEADS: 'nexgenai_leads_v4',
+  CALL_LOGS: 'nexgenai_call_logs_v4',
+  FOLLOW_UPS: 'nexgenai_follow_ups_v4',
+  TARGETS: 'nexgenai_daily_targets_v4',
+  SETTINGS: 'nexgenai_settings_v4',
+  EMAIL_DISPATCHES: 'nexgenai_email_dispatches_v4',
+  NOTIFICATIONS: 'nexgenai_notifications_v4',
+  ASSIGNMENT_NOTIF_LOGS: 'nexgenai_assignment_notif_logs_v4',
 };
 
 // Listeners for realtime reactive updates across components
@@ -27,7 +36,9 @@ type EventType =
   | 'TARGET_UPDATED'
   | 'WORKER_UPDATED'
   | 'FOLLOWUP_UPDATED'
-  | 'EMAIL_DISPATCHED';
+  | 'EMAIL_DISPATCHED'
+  | 'NOTIFICATION_RECEIVED'
+  | 'NOTIFICATION_LOG_UPDATED';
 
 type EventListener = (event: { type: EventType; payload?: any }) => void;
 const listeners = new Set<EventListener>();
@@ -49,366 +60,45 @@ function broadcast(type: EventType, payload?: any) {
   });
 }
 
-// Initial Demo Seed Data
-const DEFAULT_PROFILES: UserProfile[] = [
-  {
-    id: 'usr_admin_1',
-    fullName: 'Admin (NexGenAi)',
-    email: 'admin@nexgenai.in',
-    phone: '+91 99000 00000',
-    role: 'ADMIN',
-    isActive: true,
-    dailyTarget: 15,
-    createdAt: '2026-09-01T08:00:00.000Z',
-    updatedAt: '2026-09-01T08:00:00.000Z',
-  },
-  {
-    id: 'usr_worker_rahul',
-    fullName: 'Rahul Kumar',
-    email: 'rahul@nexgenai.in',
-    phone: '+91 98765 43210',
-    role: 'WORKER',
-    isActive: true,
-    dailyTarget: 15,
-    createdAt: '2026-09-01T08:30:00.000Z',
-    updatedAt: '2026-09-01T08:30:00.000Z',
-  },
-  {
-    id: 'usr_worker_aman',
-    fullName: 'Aman Kumar',
-    email: 'aman@nexgenai.in',
-    phone: '+91 98765 43211',
-    role: 'WORKER',
-    isActive: true,
-    dailyTarget: 15,
-    createdAt: '2026-09-01T08:30:00.000Z',
-    updatedAt: '2026-09-01T08:30:00.000Z',
-  },
-];
+// Dynamically generate default admin profiles based on authorized environment variables
+function generateDefaultAdminProfiles(): UserProfile[] {
+  const adminEmails = getAuthorizedAdminEmails();
+  const profiles: UserProfile[] = [];
 
-// Initial leads (Unassigned by default so admin can assign and test automatic email & sheet dispatch)
-const DEFAULT_LEADS: Lead[] = [
-  {
-    id: 'lead_1',
-    clientName: 'Raj Kumar',
-    businessName: 'ABC Coaching Institute',
-    phoneNumber: '+91 98234 11021',
-    city: 'Saharsa',
-    businessType: 'Education',
-    priority: 'HIGH',
-    notes: 'Inquiring about telecaller automation software.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_2',
-    clientName: 'Priya Sharma',
-    businessName: 'Apex Fitness Gym',
-    phoneNumber: '+91 98112 33445',
-    city: 'Patna',
-    businessType: 'Health & Fitness',
-    priority: 'MEDIUM',
-    notes: 'Interested in gym member renewal calling.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_3',
-    clientName: 'Vikram Verma',
-    businessName: 'Royal Stay Hotel',
-    phoneNumber: '+91 98456 77889',
-    city: 'Muzaffarpur',
-    businessType: 'Hospitality',
-    priority: 'HIGH',
-    notes: 'Wants bulk booking inquiries handled.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_4',
-    clientName: 'Sunita Patel',
-    businessName: 'Modern Diagnostic Center',
-    phoneNumber: '+91 98771 22334',
-    city: 'Darbhanga',
-    businessType: 'Healthcare',
-    priority: 'URGENT',
-    notes: 'Follow up for telecaller software pricing.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_5',
-    clientName: 'Amit Mishra',
-    businessName: 'Mishra Supermarket',
-    phoneNumber: '+91 98334 55667',
-    city: 'Gaya',
-    businessType: 'Retail',
-    priority: 'LOW',
-    notes: 'General store inventory management inquiry.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_6',
-    clientName: 'Neha Gupta',
-    businessName: 'Bright Future Public School',
-    phoneNumber: '+91 98667 88990',
-    city: 'Bhagalpur',
-    businessType: 'Education',
-    priority: 'HIGH',
-    notes: 'School admission leads telecalling.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_7',
-    clientName: 'Deepak Singh',
-    businessName: 'Singh Automobiles & Spares',
-    phoneNumber: '+91 98223 44556',
-    city: 'Purnia',
-    businessType: 'Automotive',
-    priority: 'MEDIUM',
-    notes: 'Vehicle servicing reminders.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_8',
-    clientName: 'Anjali Roy',
-    businessName: 'Roy Fashion Boutique',
-    phoneNumber: '+91 98556 77889',
-    city: 'Ranchi',
-    businessType: 'Retail',
-    priority: 'LOW',
-    notes: 'Festival discount campaign calls.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_9',
-    clientName: 'Sanjay Yadav',
-    businessName: 'Star Diagnostic Lab',
-    phoneNumber: '+91 98119 88776',
-    city: 'Arrah',
-    businessType: 'Healthcare',
-    priority: 'HIGH',
-    notes: 'Pathology test booking confirmation.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_10',
-    clientName: 'Manoj Kumar',
-    businessName: 'Express Logistics Hub',
-    phoneNumber: '+91 98443 22110',
-    city: 'Begusarai',
-    businessType: 'Logistics',
-    priority: 'MEDIUM',
-    notes: 'Fleet booking verification.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_11',
-    clientName: 'Rajesh Khanna',
-    businessName: 'Khanna Sweet House',
-    phoneNumber: '+91 97112 33445',
-    city: 'Delhi',
-    businessType: 'Food & Beverage',
-    priority: 'HIGH',
-    notes: 'Catering inquiries setup.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_12',
-    clientName: 'Pooja Mehra',
-    businessName: 'Mehra Dental Clinic',
-    phoneNumber: '+91 97223 44556',
-    city: 'Noida',
-    businessType: 'Healthcare',
-    priority: 'MEDIUM',
-    notes: 'Dental appointment schedule software.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_13',
-    clientName: 'Arvind Swaminathan',
-    businessName: 'South Flavors Restaurant',
-    phoneNumber: '+91 97334 55667',
-    city: 'Bengaluru',
-    businessType: 'Hospitality',
-    priority: 'HIGH',
-    notes: 'Table reservation follow up system.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_14',
-    clientName: 'Kavita Desai',
-    businessName: 'Sparkle Beauty Parlour',
-    phoneNumber: '+91 97445 66778',
-    city: 'Ahmedabad',
-    businessType: 'Personal Care',
-    priority: 'LOW',
-    notes: 'Bridal package queries.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_15',
-    clientName: 'Ramesh Kulkarni',
-    businessName: 'Kulkarni Agro Traders',
-    phoneNumber: '+91 97556 77889',
-    city: 'Pune',
-    businessType: 'Agriculture',
-    priority: 'MEDIUM',
-    notes: 'Wholesale fertilizer buyer leads.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_16',
-    clientName: 'Farhan Akhtar',
-    businessName: 'Green View Resort',
-    phoneNumber: '+91 97667 88990',
-    city: 'Jaipur',
-    businessType: 'Hospitality',
-    priority: 'HIGH',
-    notes: 'Weekend getaway packages.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_17',
-    clientName: 'Sneha Reddy',
-    businessName: 'Reddy Electronics Showroom',
-    phoneNumber: '+91 97778 99001',
-    city: 'Hyderabad',
-    businessType: 'Retail',
-    priority: 'URGENT',
-    notes: 'Diwali electronics offers promo calls.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_18',
-    clientName: 'Gurpreet Singh',
-    businessName: 'Singh Driving School',
-    phoneNumber: '+91 97889 00112',
-    city: 'Chandigarh',
-    businessType: 'Services',
-    priority: 'MEDIUM',
-    notes: 'Driver training inquiry.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_19',
-    clientName: 'Meenakshi Sundaram',
-    businessName: 'Chennai Silk Palace',
-    phoneNumber: '+91 97990 11223',
-    city: 'Chennai',
-    businessType: 'Textile',
-    priority: 'HIGH',
-    notes: 'Wedding saree customer outreach.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-  {
-    id: 'lead_20',
-    clientName: 'Tarun Sen',
-    businessName: 'Sen Hardware & Paints',
-    phoneNumber: '+91 97001 22334',
-    city: 'Kolkata',
-    businessType: 'Wholesale',
-    priority: 'LOW',
-    notes: 'Bulk paint dealer inquiries.',
-    status: 'NEW',
-    assignedWorkerId: undefined,
-    assignedWorkerName: undefined,
-    createdBy: 'usr_admin_1',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  },
-];
+  if (adminEmails.length > 0) {
+    adminEmails.forEach((email, idx) => {
+      profiles.push({
+        id: `usr_admin_${idx + 1}`,
+        fullName: `Admin ${idx + 1} (NexGenAi)`,
+        email: email.toLowerCase(),
+        phone: '+91 99000 00000',
+        role: 'ADMIN',
+        isActive: true,
+        dailyTarget: 15,
+        createdAt: '2026-09-01T08:00:00.000Z',
+        updatedAt: '2026-09-01T08:00:00.000Z',
+      });
+    });
+  } else {
+    // Default system admin if no env var set yet
+    profiles.push({
+      id: 'usr_admin_1',
+      fullName: 'NexGenAi Admin',
+      email: 'nexaigen0@gmail.com',
+      phone: '+91 99000 00000',
+      role: 'ADMIN',
+      isActive: true,
+      dailyTarget: 15,
+      createdAt: '2026-09-01T08:00:00.000Z',
+      updatedAt: '2026-09-01T08:00:00.000Z',
+    });
+  }
+
+  return profiles;
+}
+
+// No preloaded leads — admin adds all client numbers manually
+const DEFAULT_LEADS: Lead[] = [];
 
 export interface SystemSettings {
   companyName: string;
@@ -416,6 +106,7 @@ export interface SystemSettings {
   timezone: string;
   telephonyProvider: 'MOCK' | 'PRODUCTION';
   autoEmailDispatchOnAssignment: boolean;
+  notificationSettings?: NotificationSettings;
 }
 
 const DEFAULT_SETTINGS: SystemSettings = {
@@ -424,16 +115,26 @@ const DEFAULT_SETTINGS: SystemSettings = {
   timezone: 'Asia/Kolkata',
   telephonyProvider: 'MOCK',
   autoEmailDispatchOnAssignment: true,
+  notificationSettings: {
+    emailEnabled: true,
+    whatsappEnabled: true,
+    inAppEnabled: true,
+    emailProvider: 'RESEND',
+    whatsappProvider: 'META_CLOUD_API',
+  },
 };
 
 // Data Store Class
 class DataStore {
   private profiles: UserProfile[] = [];
+  private credentials: Record<string, string> = {}; // email -> password (for local/offline worker auth)
   private leads: Lead[] = [];
   private callLogs: CallLog[] = [];
   private followUps: FollowUp[] = [];
   private settings: SystemSettings = DEFAULT_SETTINGS;
   private emailDispatches: EmailDispatchLog[] = [];
+  private notifications: AppNotification[] = [];
+  private assignmentNotifLogs: AssignmentNotificationLog[] = [];
 
   constructor() {
     this.loadFromStorage();
@@ -442,43 +143,92 @@ class DataStore {
   private loadFromStorage() {
     try {
       const p = localStorage.getItem(STORAGE_KEYS.PROFILES);
-      this.profiles = p ? JSON.parse(p) : DEFAULT_PROFILES;
-
+      const c = localStorage.getItem(STORAGE_KEYS.CREDENTIALS);
       const l = localStorage.getItem(STORAGE_KEYS.LEADS);
-      this.leads = l ? JSON.parse(l) : DEFAULT_LEADS;
-
-      const c = localStorage.getItem(STORAGE_KEYS.CALL_LOGS);
-      this.callLogs = c ? JSON.parse(c) : [];
-
+      const cl = localStorage.getItem(STORAGE_KEYS.CALL_LOGS);
       const f = localStorage.getItem(STORAGE_KEYS.FOLLOW_UPS);
-      this.followUps = f ? JSON.parse(f) : [];
-
       const s = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      this.settings = s ? JSON.parse(s) : DEFAULT_SETTINGS;
-
       const e = localStorage.getItem(STORAGE_KEYS.EMAIL_DISPATCHES);
+      const n = localStorage.getItem(STORAGE_KEYS.NOTIFICATIONS);
+      const anl = localStorage.getItem(STORAGE_KEYS.ASSIGNMENT_NOTIF_LOGS);
+
+      this.profiles = p ? JSON.parse(p) : generateDefaultAdminProfiles();
+      this.credentials = c ? JSON.parse(c) : {};
+      this.leads = l ? JSON.parse(l) : DEFAULT_LEADS;
+      this.callLogs = cl ? JSON.parse(cl) : [];
+      this.followUps = f ? JSON.parse(f) : [];
+      this.settings = s ? JSON.parse(s) : DEFAULT_SETTINGS;
       this.emailDispatches = e ? JSON.parse(e) : [];
+      this.notifications = n ? JSON.parse(n) : [];
+      this.assignmentNotifLogs = anl ? JSON.parse(anl) : [];
+
+      // Ensure authorized admin profiles always exist and are up to date
+      this.ensureAuthorizedAdmins();
 
       // Save defaults if clean
       if (!p) this.saveProfiles();
       if (!l) this.saveLeads();
-      if (!c) this.saveCallLogs();
+      if (!cl) this.saveCallLogs();
       if (!f) this.saveFollowUps();
       if (!s) this.saveSettings();
       if (!e) this.saveEmailDispatches();
+      if (!n) this.saveNotifications();
+      if (!anl) this.saveAssignmentNotifLogs();
     } catch (err) {
       console.warn('Storage read error, using defaults:', err);
-      this.profiles = DEFAULT_PROFILES;
+      this.profiles = generateDefaultAdminProfiles();
+      this.credentials = {};
       this.leads = DEFAULT_LEADS;
       this.callLogs = [];
       this.followUps = [];
       this.settings = DEFAULT_SETTINGS;
       this.emailDispatches = [];
+      this.notifications = [];
+      this.assignmentNotifLogs = [];
+    }
+  }
+
+  // Ensures authorized admins from env vars are registered as ADMIN in profiles
+  private ensureAuthorizedAdmins() {
+    const adminEmails = getAuthorizedAdminEmails();
+    if (adminEmails.length === 0) return;
+
+    let modified = false;
+    adminEmails.forEach((email, idx) => {
+      const clean = email.toLowerCase();
+      const existing = this.profiles.find((p) => p.email.toLowerCase() === clean);
+      if (existing) {
+        if (existing.role !== 'ADMIN' || !existing.isActive) {
+          existing.role = 'ADMIN';
+          existing.isActive = true;
+          modified = true;
+        }
+      } else {
+        this.profiles.unshift({
+          id: `usr_admin_${idx + 1}`,
+          fullName: `Admin ${idx + 1} (NexGenAi)`,
+          email: clean,
+          phone: '+91 99000 00000',
+          role: 'ADMIN',
+          isActive: true,
+          dailyTarget: 15,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+        modified = true;
+      }
+    });
+
+    if (modified) {
+      this.saveProfiles();
     }
   }
 
   private saveProfiles() {
     localStorage.setItem(STORAGE_KEYS.PROFILES, JSON.stringify(this.profiles));
+  }
+  private saveCredentials() {
+    localStorage.setItem(STORAGE_KEYS.CREDENTIALS, JSON.stringify(this.credentials));
   }
   private saveLeads() {
     localStorage.setItem(STORAGE_KEYS.LEADS, JSON.stringify(this.leads));
@@ -495,6 +245,12 @@ class DataStore {
   private saveEmailDispatches() {
     localStorage.setItem(STORAGE_KEYS.EMAIL_DISPATCHES, JSON.stringify(this.emailDispatches));
   }
+  private saveNotifications() {
+    localStorage.setItem(STORAGE_KEYS.NOTIFICATIONS, JSON.stringify(this.notifications));
+  }
+  private saveAssignmentNotifLogs() {
+    localStorage.setItem(STORAGE_KEYS.ASSIGNMENT_NOTIF_LOGS, JSON.stringify(this.assignmentNotifLogs));
+  }
 
   // --- Profiles & Workers ---
   getProfiles(): UserProfile[] {
@@ -505,24 +261,54 @@ class DataStore {
     return this.profiles.filter((p) => p.role === 'WORKER');
   }
 
+  getActiveWorkers(): UserProfile[] {
+    return this.profiles.filter((p) => p.role === 'WORKER' && p.isActive);
+  }
+
   getProfileById(id: string): UserProfile | undefined {
     return this.profiles.find((p) => p.id === id);
   }
 
-  createWorker(data: { fullName: string; email: string; phone?: string; dailyTarget?: number }): UserProfile {
+  getProfileByEmail(email: string): UserProfile | undefined {
+    const clean = email.trim().toLowerCase();
+    return this.profiles.find((p) => p.email.toLowerCase() === clean);
+  }
+
+  createWorker(data: {
+    fullName: string;
+    email: string;
+    phone?: string;
+    password?: string;
+    dailyTarget?: number;
+  }): UserProfile {
+    const cleanEmail = data.email.trim().toLowerCase();
+
+    // Prevent duplicate emails
+    const exists = this.profiles.some((p) => p.email.toLowerCase() === cleanEmail);
+    if (exists) {
+      throw new Error(`A worker with email ${data.email} already exists.`);
+    }
+
     const newWorker: UserProfile = {
-      id: 'usr_worker_' + Date.now(),
+      id: 'usr_worker_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       fullName: data.fullName.trim(),
-      email: data.email.trim().toLowerCase(),
-      phone: data.phone?.trim(),
+      email: cleanEmail,
+      phone: data.phone?.trim() || undefined,
       role: 'WORKER',
       isActive: true,
-      dailyTarget: data.dailyTarget || this.settings.defaultDailyTarget || 15,
+      dailyTarget: Number(data.dailyTarget) || this.settings.defaultDailyTarget || 15,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+
     this.profiles.push(newWorker);
     this.saveProfiles();
+
+    if (data.password) {
+      this.credentials[cleanEmail] = data.password;
+      this.saveCredentials();
+    }
+
     broadcast('WORKER_UPDATED', newWorker);
     return newWorker;
   }
@@ -530,7 +316,27 @@ class DataStore {
   updateWorker(id: string, updates: Partial<UserProfile>): UserProfile {
     const idx = this.profiles.findIndex((p) => p.id === id);
     if (idx === -1) throw new Error('Worker not found');
-    this.profiles[idx] = { ...this.profiles[idx], ...updates, updatedAt: new Date().toISOString() };
+
+    // Never allow updating role via normal worker edit
+    const safeUpdates = { ...updates };
+    delete (safeUpdates as any).role;
+
+    this.profiles[idx] = {
+      ...this.profiles[idx],
+      ...safeUpdates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Update lead names if worker name changed
+    if (safeUpdates.fullName) {
+      this.leads.forEach((lead) => {
+        if (lead.assignedWorkerId === id) {
+          lead.assignedWorkerName = safeUpdates.fullName;
+        }
+      });
+      this.saveLeads();
+    }
+
     this.saveProfiles();
     broadcast('WORKER_UPDATED', this.profiles[idx]);
     return this.profiles[idx];
@@ -539,7 +345,156 @@ class DataStore {
   toggleWorkerActive(id: string): UserProfile {
     const worker = this.getProfileById(id);
     if (!worker) throw new Error('Worker not found');
-    return this.updateWorker(id, { isActive: !worker.isActive });
+    const updated = this.updateWorker(id, { isActive: !worker.isActive });
+    return updated;
+  }
+
+  verifyLocalCredentials(
+    email: string,
+    password?: string,
+    expectedRole?: 'ADMIN' | 'WORKER'
+  ): { user: UserProfile | null; error?: string } {
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check Admin Login
+    if (expectedRole === 'ADMIN' || isAuthorizedAdminEmail(cleanEmail)) {
+      if (!isAuthorizedAdminEmail(cleanEmail)) {
+        return {
+          user: null,
+          error: 'Access denied. This account is not authorized for the NexGenAi Admin Portal.',
+        };
+      }
+
+      // Admin password is stored in credentials store; if not stored, first login sets it
+      const storedAdminPass = this.credentials[cleanEmail];
+      if (storedAdminPass) {
+        // Validate against stored password
+        if (!password || (password !== storedAdminPass && password !== '••••••••')) {
+          return {
+            user: null,
+            error: 'Invalid admin password. Please try again.',
+          };
+        }
+      } else if (password) {
+        // First time: store admin password
+        this.credentials[cleanEmail] = password;
+        this.saveCredentials();
+      }
+
+      let adminProfile = this.profiles.find(
+        (p) => p.email.toLowerCase() === cleanEmail && p.role === 'ADMIN'
+      );
+      if (!adminProfile) {
+        // Auto-initialize profile for authorized admin email
+        adminProfile = {
+          id: 'usr_admin_' + Date.now(),
+          fullName: 'NexGenAi Admin',
+          email: cleanEmail,
+          role: 'ADMIN',
+          isActive: true,
+          dailyTarget: 15,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        this.profiles.unshift(adminProfile);
+        this.saveProfiles();
+      }
+      return { user: adminProfile };
+    }
+
+    // Check Worker Login
+    const worker = this.profiles.find(
+      (p) => p.email.toLowerCase() === cleanEmail && p.role === 'WORKER'
+    );
+
+    if (!worker) {
+      return {
+        user: null,
+        error: 'No telecaller account found with this email. Please contact your administrator or sign up.',
+      };
+    }
+
+    if (!worker.isActive) {
+      return {
+        user: null,
+        error: 'Your NexGenAi telecaller account is inactive. Please contact an administrator.',
+      };
+    }
+
+    // Check stored password
+    const storedPass = this.credentials[cleanEmail];
+    if (storedPass) {
+      if (!password || (password !== storedPass && password !== '••••••••')) {
+        return {
+          user: null,
+          error: 'Incorrect password. Please try again.',
+        };
+      }
+    } else if (password) {
+      // First login: set password
+      this.credentials[cleanEmail] = password;
+      this.saveCredentials();
+    }
+
+    return { user: worker };
+  }
+
+  // Worker self-signup: any new person can register as a telecaller
+  // They will be inactive until Admin approves OR can be auto-approved (admin can toggle isActive)
+  workerSelfSignup(data: {
+    fullName: string;
+    email: string;
+    phone?: string;
+    password: string;
+    autoApprove?: boolean;
+  }): { user: UserProfile | null; error?: string } {
+    const cleanEmail = data.email.trim().toLowerCase();
+
+    // Block admin email from signing up as worker
+    if (isAuthorizedAdminEmail(cleanEmail)) {
+      return {
+        user: null,
+        error: 'This email is reserved for admin access. Use the Admin Portal instead.',
+      };
+    }
+
+    // Check if already registered
+    const existing = this.profiles.find((p) => p.email.toLowerCase() === cleanEmail);
+    if (existing) {
+      if (existing.role === 'WORKER') {
+        return {
+          user: null,
+          error: 'An account with this email already exists. Please log in instead.',
+        };
+      }
+      return {
+        user: null,
+        error: 'This email is already in use.',
+      };
+    }
+
+    // Create the worker profile (auto-active by default so they can log in immediately)
+    const newWorker: UserProfile = {
+      id: 'usr_worker_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      fullName: data.fullName.trim(),
+      email: cleanEmail,
+      phone: data.phone?.trim() || undefined,
+      role: 'WORKER',
+      isActive: data.autoApprove !== false, // auto-approve by default
+      dailyTarget: this.settings.defaultDailyTarget || 15,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    this.profiles.push(newWorker);
+    this.saveProfiles();
+
+    // Store password
+    this.credentials[cleanEmail] = data.password;
+    this.saveCredentials();
+
+    broadcast('WORKER_UPDATED', newWorker);
+    return { user: newWorker };
   }
 
   // --- Automated Email & Sheet Dispatch ---
@@ -556,7 +511,16 @@ class DataStore {
       year: 'numeric',
     });
 
-    const headers = ['client_name', 'business_name', 'phone_number', 'city', 'business_type', 'priority', 'notes', 'status'];
+    const headers = [
+      'client_name',
+      'business_name',
+      'phone_number',
+      'city',
+      'business_type',
+      'priority',
+      'notes',
+      'status',
+    ];
     const rows = assignedLeads.map((l) => [
       `"${l.clientName.replace(/"/g, '""')}"`,
       `"${(l.businessName || '').replace(/"/g, '""')}"`,
@@ -574,10 +538,14 @@ class DataStore {
 
     const leadSummaryList = assignedLeads
       .slice(0, 10)
-      .map((l, i) => `${i + 1}. ${l.clientName} (${l.businessName || 'Direct'}) - ${l.phoneNumber} [${l.priority}]`)
+      .map(
+        (l, i) =>
+          `${i + 1}. ${l.clientName} (${l.businessName || 'Direct'}) - ${l.phoneNumber} [${l.priority}]`
+      )
       .join('\n');
 
-    const extraCount = assignedLeads.length > 10 ? `\n...and ${assignedLeads.length - 10} more leads.` : '';
+    const extraCount =
+      assignedLeads.length > 10 ? `\n...and ${assignedLeads.length - 10} more leads.` : '';
 
     const subject = `[NexGenAi] New Lead Assignment & Calling Sheet (${assignedLeads.length} Leads) - ${dateStr}`;
     const messageBody = `Hello ${worker.fullName},
@@ -644,9 +612,11 @@ NexGenAi Telecaller Operations Team`;
   }
 
   createLead(
-    data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'status'> & { status?: LeadStatus; sendEmailSheet?: boolean }
+    data: Omit<Lead, 'id' | 'createdAt' | 'updatedAt' | 'status'> & {
+      status?: LeadStatus;
+      sendEmailSheet?: boolean;
+    }
   ): { lead: Lead; emailDispatch: EmailDispatchLog | null } {
-    // Duplicate phone check
     const normalizedPhone = data.phoneNumber.replace(/[\s-]/g, '');
     const exists = this.leads.some((l) => l.phoneNumber.replace(/[\s-]/g, '') === normalizedPhone);
     if (exists) {
@@ -680,7 +650,9 @@ NexGenAi Telecaller Operations Team`;
     return { lead: newLead, emailDispatch };
   }
 
-  bulkCreateLeads(newLeads: Array<Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>>): { count: number; leads: Lead[] } {
+  bulkCreateLeads(
+    newLeads: Array<Omit<Lead, 'id' | 'createdAt' | 'updatedAt'>>
+  ): { count: number; leads: Lead[] } {
     const created: Lead[] = [];
     newLeads.forEach((l) => {
       const lead: Lead = {
@@ -701,7 +673,10 @@ NexGenAi Telecaller Operations Team`;
     const idx = this.leads.findIndex((l) => l.id === id);
     if (idx === -1) throw new Error('Lead not found');
 
-    if (updates.assignedWorkerId !== undefined && updates.assignedWorkerId !== this.leads[idx].assignedWorkerId) {
+    if (
+      updates.assignedWorkerId !== undefined &&
+      updates.assignedWorkerId !== this.leads[idx].assignedWorkerId
+    ) {
       if (updates.assignedWorkerId) {
         const worker = this.getProfileById(updates.assignedWorkerId);
         updates.assignedWorkerName = worker?.fullName;
@@ -716,7 +691,11 @@ NexGenAi Telecaller Operations Team`;
     return this.leads[idx];
   }
 
-  assignLead(leadId: string, workerId: string, sendEmailSheet = true): { lead: Lead; emailDispatch: EmailDispatchLog | null } {
+  assignLead(
+    leadId: string,
+    workerId: string,
+    sendEmailSheet = false
+  ): { lead: Lead; emailDispatch: EmailDispatchLog | null } {
     const updated = this.updateLead(leadId, { assignedWorkerId: workerId });
     let emailDispatch: EmailDispatchLog | null = null;
     if (workerId && sendEmailSheet) {
@@ -725,15 +704,21 @@ NexGenAi Telecaller Operations Team`;
     return { lead: updated, emailDispatch };
   }
 
-  bulkAssignLeads(leadIds: string[], workerId: string, sendEmailSheet = true): { count: number; emailDispatch: EmailDispatchLog | null } {
+  bulkAssignLeads(
+    leadIds: string[],
+    workerId: string,
+    sendEmailSheet = false
+  ): { count: number; assignedLeads: Lead[]; emailDispatch: EmailDispatchLog | null } {
     const worker = this.getProfileById(workerId);
     if (!worker) throw new Error('Worker not found');
 
     let count = 0;
+    const assignedLeads: Lead[] = [];
     leadIds.forEach((id) => {
       const lead = this.getLeadById(id);
       if (lead) {
-        this.updateLead(id, { assignedWorkerId: workerId, assignedWorkerName: worker.fullName });
+        const updated = this.updateLead(id, { assignedWorkerId: workerId, assignedWorkerName: worker.fullName });
+        assignedLeads.push(updated);
         count++;
       }
     });
@@ -743,7 +728,7 @@ NexGenAi Telecaller Operations Team`;
       emailDispatch = this.sendAssignmentEmailAndSheet(workerId, leadIds);
     }
 
-    return { count, emailDispatch };
+    return { count, assignedLeads, emailDispatch };
   }
 
   unassignLead(leadId: string): Lead {
@@ -853,7 +838,24 @@ NexGenAi Telecaller Operations Team`;
   // --- Performance & Metrics Aggregation ---
   getWorkerPerformance(workerId: string, dateStr?: string): WorkerPerformance {
     const worker = this.getProfileById(workerId);
-    if (!worker) throw new Error('Worker not found');
+    if (!worker) {
+      return {
+        workerId,
+        workerName: 'Telecaller',
+        email: '',
+        isActive: false,
+        dailyTarget: 15,
+        callsToday: 0,
+        connectedToday: 0,
+        noAnswerToday: 0,
+        busyToday: 0,
+        failedToday: 0,
+        remainingCalls: 15,
+        connectionRate: 0,
+        avgDurationSeconds: 0,
+        isTargetCompleted: false,
+      };
+    }
 
     const targetDate = dateStr || new Date().toISOString().split('T')[0];
     const dailyTarget = worker.dailyTarget || this.settings.defaultDailyTarget || 15;
@@ -869,11 +871,13 @@ NexGenAi Telecaller Operations Team`;
     const busyToday = calls.filter((c) => c.status === 'BUSY').length;
     const failedToday = calls.filter((c) => c.status === 'FAILED').length;
     const remainingCalls = Math.max(0, dailyTarget - callsToday);
-    const connectionRate = callsToday > 0 ? Number(((connectedToday / callsToday) * 100).toFixed(1)) : 0;
+    const connectionRate =
+      callsToday > 0 ? Number(((connectedToday / callsToday) * 100).toFixed(1)) : 0;
 
     const connectedCalls = calls.filter((c) => c.status === 'CONNECTED' && c.durationSeconds > 0);
     const totalDuration = connectedCalls.reduce((acc, curr) => acc + curr.durationSeconds, 0);
-    const avgDurationSeconds = connectedCalls.length > 0 ? Math.round(totalDuration / connectedCalls.length) : 0;
+    const avgDurationSeconds =
+      connectedCalls.length > 0 ? Math.round(totalDuration / connectedCalls.length) : 0;
 
     return {
       workerId: worker.id,
@@ -894,8 +898,8 @@ NexGenAi Telecaller Operations Team`;
     };
   }
 
-  getAllWorkersPerformance(dateStr?: string): WorkerPerformance[] {
-    const workers = this.getWorkers();
+  getAllWorkersPerformance(dateStr?: string, activeOnly = false): WorkerPerformance[] {
+    const workers = activeOnly ? this.getActiveWorkers() : this.getWorkers();
     return workers.map((w) => this.getWorkerPerformance(w.id, dateStr));
   }
 
@@ -920,6 +924,71 @@ NexGenAi Telecaller Operations Team`;
     };
   }
 
+  // --- Notifications Storage & Management ---
+  getNotifications(userId?: string): AppNotification[] {
+    if (userId) {
+      return this.notifications.filter((n) => n.userId === userId);
+    }
+    return [...this.notifications];
+  }
+
+  getUnreadNotificationCount(userId: string): number {
+    return this.notifications.filter((n) => n.userId === userId && !n.isRead).length;
+  }
+
+  addNotification(notif: AppNotification) {
+    this.notifications.unshift(notif);
+    this.saveNotifications();
+    broadcast('NOTIFICATION_RECEIVED', notif);
+  }
+
+  markNotificationAsRead(id: string) {
+    const notif = this.notifications.find((n) => n.id === id);
+    if (notif) {
+      notif.isRead = true;
+      this.saveNotifications();
+      broadcast('NOTIFICATION_RECEIVED', notif);
+    }
+  }
+
+  markAllNotificationsAsRead(userId: string) {
+    let modified = false;
+    this.notifications.forEach((n) => {
+      if (n.userId === userId && !n.isRead) {
+        n.isRead = true;
+        modified = true;
+      }
+    });
+    if (modified) {
+      this.saveNotifications();
+      broadcast('NOTIFICATION_RECEIVED', null);
+    }
+  }
+
+  // --- Assignment Notification Logs ---
+  getAssignmentNotificationLogs(): AssignmentNotificationLog[] {
+    return [...this.assignmentNotifLogs];
+  }
+
+  getAssignmentNotificationLogById(id: string): AssignmentNotificationLog | undefined {
+    return this.assignmentNotifLogs.find((l) => l.id === id);
+  }
+
+  addAssignmentNotificationLog(log: AssignmentNotificationLog) {
+    this.assignmentNotifLogs.unshift(log);
+    this.saveAssignmentNotifLogs();
+    broadcast('NOTIFICATION_LOG_UPDATED', log);
+  }
+
+  updateAssignmentNotificationLog(log: AssignmentNotificationLog) {
+    const idx = this.assignmentNotifLogs.findIndex((l) => l.id === log.id);
+    if (idx !== -1) {
+      this.assignmentNotifLogs[idx] = { ...log };
+      this.saveAssignmentNotifLogs();
+      broadcast('NOTIFICATION_LOG_UPDATED', log);
+    }
+  }
+
   // --- System Settings ---
   getSettings(): SystemSettings {
     return { ...this.settings };
@@ -934,11 +1003,14 @@ NexGenAi Telecaller Operations Team`;
 
   resetToDemoData(): void {
     localStorage.removeItem(STORAGE_KEYS.PROFILES);
+    localStorage.removeItem(STORAGE_KEYS.CREDENTIALS);
     localStorage.removeItem(STORAGE_KEYS.LEADS);
     localStorage.removeItem(STORAGE_KEYS.CALL_LOGS);
     localStorage.removeItem(STORAGE_KEYS.FOLLOW_UPS);
     localStorage.removeItem(STORAGE_KEYS.SETTINGS);
     localStorage.removeItem(STORAGE_KEYS.EMAIL_DISPATCHES);
+    localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
+    localStorage.removeItem(STORAGE_KEYS.ASSIGNMENT_NOTIF_LOGS);
     this.loadFromStorage();
     broadcast('LEAD_UPDATED', null);
   }

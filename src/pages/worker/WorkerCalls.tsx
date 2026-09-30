@@ -4,15 +4,18 @@ import { CallStatusBadge } from '../../components/common/Badge';
 import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
 import { CallLog } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
-import { PhoneCall, Clock, Calendar, CheckCircle2 } from 'lucide-react';
+import { PhoneCall } from 'lucide-react';
 
 export const WorkerCalls: React.FC = () => {
-  const { user } = useAuth();
-  const workerId = user?.id || 'usr_worker_rahul';
+  const { user, currentWorkerId } = useAuth();
+  const workerId = currentWorkerId || user?.id || '';
 
-  const [calls, setCalls] = useState<CallLog[]>(() => dataStore.getCallLogs(workerId));
+  const [calls, setCalls] = useState<CallLog[]>(() =>
+    workerId ? dataStore.getCallLogs(workerId) : []
+  );
 
   const refreshData = () => {
+    if (!workerId) return;
     setCalls(dataStore.getCallLogs(workerId));
   };
 
@@ -23,6 +26,10 @@ export const WorkerCalls: React.FC = () => {
     });
     return () => unsubscribe();
   }, [workerId]);
+
+  if (!workerId) {
+    return null;
+  }
 
   const formatDuration = (secs: number) => {
     const mins = Math.floor(secs / 60);

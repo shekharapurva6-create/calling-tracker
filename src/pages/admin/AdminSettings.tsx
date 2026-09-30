@@ -2,7 +2,18 @@ import React, { useState } from 'react';
 import { Card } from '../../components/common/Card';
 import { Button } from '../../components/common/Button';
 import { dataStore } from '../../services/storage/dataStore';
-import { Building2, Target, Globe, Phone, ShieldCheck, RefreshCw, CheckCircle2 } from 'lucide-react';
+import {
+  Building2,
+  Target,
+  Globe,
+  Phone,
+  ShieldCheck,
+  RefreshCw,
+  CheckCircle2,
+  Bell,
+  Mail,
+  MessageSquare,
+} from 'lucide-react';
 import { showToast } from '../../components/common/Toast';
 
 export const AdminSettings: React.FC = () => {
@@ -13,6 +24,17 @@ export const AdminSettings: React.FC = () => {
   const [telephonyProvider, setTelephonyProvider] = useState<'MOCK' | 'PRODUCTION'>(
     currentSettings.telephonyProvider || 'MOCK'
   );
+
+  // Notification settings state
+  const notifSettings = currentSettings.notificationSettings || {
+    emailEnabled: true,
+    whatsappEnabled: true,
+    inAppEnabled: true,
+  };
+  const [emailEnabled, setEmailEnabled] = useState(notifSettings.emailEnabled ?? true);
+  const [whatsappEnabled, setWhatsappEnabled] = useState(notifSettings.whatsappEnabled ?? true);
+  const [inAppEnabled, setInAppEnabled] = useState(notifSettings.inAppEnabled ?? true);
+
   const [isSaving, setIsSaving] = useState(false);
 
   const handleSaveSettings = (e: React.FormEvent) => {
@@ -25,6 +47,13 @@ export const AdminSettings: React.FC = () => {
         defaultDailyTarget: Number(defaultDailyTarget) || 15,
         timezone,
         telephonyProvider,
+        notificationSettings: {
+          emailEnabled,
+          whatsappEnabled,
+          inAppEnabled,
+          emailProvider: 'RESEND',
+          whatsappProvider: 'META_CLOUD_API',
+        },
       });
       setIsSaving(false);
       showToast('Settings saved successfully', 'success');
@@ -119,6 +148,105 @@ export const AdminSettings: React.FC = () => {
           </div>
         </Card>
 
+        {/* Notification Settings */}
+        <Card className="p-5 sm:p-6 space-y-4">
+          <div className="flex items-center gap-2 pb-3 border-b border-[#E5E9E5]">
+            <Bell className="w-5 h-5 text-[#0BAA45]" />
+            <div>
+              <h3 className="text-base font-bold text-[#172017]">Lead Assignment Notification Settings</h3>
+              <p className="text-xs text-[#6B756D]">
+                Configure automated delivery channels when leads are assigned to workers
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3.5">
+            {/* Email Notifications Toggle */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E9E5] bg-[#F7F8F6]">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#E9F9EF] text-[#0BAA45] flex items-center justify-center mt-0.5">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#172017]">Email Notifications</div>
+                  <div className="text-xs text-[#6B756D]">
+                    Sends single or consolidated lead assignment emails to worker's registered email address.
+                  </div>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={emailEnabled}
+                  onChange={(e) => setEmailEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0BAA45]"></div>
+                <span className="ml-2 text-xs font-bold text-[#172017]">
+                  {emailEnabled ? 'ON' : 'OFF'}
+                </span>
+              </label>
+            </div>
+
+            {/* WhatsApp Notifications Toggle */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E9E5] bg-[#F7F8F6]">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#E9F9EF] text-[#0BAA45] flex items-center justify-center mt-0.5">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#172017]">WhatsApp Notifications</div>
+                  <div className="text-xs text-[#6B756D]">
+                    Sends official WhatsApp Cloud API templates/messages to worker's validated phone number (+91).
+                  </div>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={whatsappEnabled}
+                  onChange={(e) => setWhatsappEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0BAA45]"></div>
+                <span className="ml-2 text-xs font-bold text-[#172017]">
+                  {whatsappEnabled ? 'ON' : 'OFF'}
+                </span>
+              </label>
+            </div>
+
+            {/* In-App Notifications Toggle */}
+            <div className="flex items-center justify-between p-3.5 rounded-xl border border-[#E5E9E5] bg-[#F7F8F6]">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-[#E9F9EF] text-[#0BAA45] flex items-center justify-center mt-0.5">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[#172017]">In-App Portal Notifications</div>
+                  <div className="text-xs text-[#6B756D]">
+                    Displays notification bell badge & real-time popup alerts on worker dashboard.
+                  </div>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={inAppEnabled}
+                  onChange={(e) => setInAppEnabled(e.target.checked)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0BAA45]"></div>
+                <span className="ml-2 text-xs font-bold text-[#172017]">
+                  {inAppEnabled ? 'ON' : 'OFF'}
+                </span>
+              </label>
+            </div>
+          </div>
+        </Card>
+
         {/* Telephony Configuration */}
         <Card className="p-5 sm:p-6 space-y-4">
           <div className="flex items-center gap-2 pb-3 border-b border-[#E5E9E5]">
@@ -201,7 +329,7 @@ export const AdminSettings: React.FC = () => {
           <div>
             <h4 className="text-sm font-bold text-[#172017]">Reset Demo Data</h4>
             <p className="text-xs text-[#6B756D] mt-0.5">
-              Restore initial 20 Indian business leads, Rahul & Aman worker profiles, and call records.
+              Restore initial company business leads, telecaller quotas, and sample call records.
             </p>
           </div>
 

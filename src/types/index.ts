@@ -164,3 +164,57 @@ export interface EmailDispatchLog {
   sentAt: string;
   status: 'DELIVERED' | 'SENT';
 }
+
+export type NotificationChannel = 'IN_APP' | 'EMAIL' | 'WHATSAPP';
+export type NotificationStatus = 'PENDING' | 'SENT' | 'FAILED' | 'NOT_CONFIGURED';
+export type NotificationType = 'LEAD_ASSIGNMENT' | 'FOLLOW_UP' | 'TARGET_REMINDER' | 'SYSTEM';
+
+export interface AppNotification {
+  id: string;
+  userId: string;
+  type: NotificationType;
+  title: string;
+  message: string;
+  channel: NotificationChannel;
+  status: NotificationStatus;
+  metadata?: Record<string, any>;
+  isRead: boolean;
+  createdAt: string;
+  sentAt?: string;
+  errorMessage?: string;
+  linkUrl?: string;
+}
+
+export interface AssignmentNotificationLog {
+  id: string;
+  batchId: string;
+  workerId: string;
+  workerName: string;
+  workerEmail: string;
+  workerPhone?: string;
+  leadCount: number;
+  leadIds: string[];
+  leadNames: string[];
+  emailStatus: NotificationStatus;
+  whatsappStatus: NotificationStatus;
+  inAppStatus: NotificationStatus;
+  emailError?: string;
+  whatsappError?: string;
+  summary: {
+    newlyAssigned: number;
+    totalAssignedToday: number;
+    dailyTarget: number;
+    callsCompleted: number;
+    remainingCalls: number;
+  };
+  createdAt: string;
+}
+
+export interface NotificationSettings {
+  emailEnabled: boolean;
+  whatsappEnabled: boolean;
+  inAppEnabled: boolean;
+  emailProvider?: 'RESEND' | 'SENDGRID' | 'SMTP' | 'MOCK';
+  whatsappProvider?: 'META_CLOUD_API' | 'TWILIO' | 'MOCK';
+}
+

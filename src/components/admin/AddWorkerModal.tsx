@@ -4,6 +4,7 @@ import { Button } from '../common/Button';
 import { dataStore } from '../../services/storage/dataStore';
 import { UserProfile } from '../../types';
 import { showToast } from '../common/Toast';
+import { isSupabaseConfigured, supabase } from '../../services/supabase/supabaseClient';
 
 interface AddWorkerModalProps {
   isOpen: boolean;
@@ -43,7 +44,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
     setError(null);
   }, [editingWorker, isOpen]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -55,37 +56,88 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
       setError('A valid email address is required');
       return;
     }
+    if (!editingWorker && (!password || password.length < 6)) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
 
     setIsLoading(true);
 
-    setTimeout(() => {
-      try {
-        if (editingWorker) {
-          dataStore.updateWorker(editingWorker.id, {
-            fullName: fullName.trim(),
-            email: email.trim().toLowerCase(),
-            phone: phone.trim() || undefined,
-            dailyTarget: Number(dailyTarget) || 15,
-          });
-          showToast('Worker details updated', 'success');
-        } else {
-          dataStore.createWorker({
-            fullName: fullName.trim(),
-            email: email.trim().toLowerCase(),
-            phone: phone.trim() || undefined,
-            dailyTarget: Number(dailyTarget) || 15,
-          });
-          showToast('Worker created successfully', 'success');
+    try {
+      if (editingWorker) {
+        dataStore.updateWorker(editingWorker.id, {
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim() || undefined,
+          dailyTarget: Number(dailyTarget) || 15,
+        });
+
+        if (isSupabaseConfigured()) {
+          try {
+            await supabase
+              .from('profiles')
+              .update({
+                full_name: fullName.trim(),
+                phone: phone.trim() || null,
+                daily_target: Number(dailyTarget) || 15,
+              })
+              .eq('id', editingWorker.id);
+          } catch (e) {
+            console.warn('Supabase update worker error:', e);
+          }
         }
 
-        onWorkerAdded();
-        onClose();
-      } catch (err: any) {
-        setError(err.message || 'Failed to save worker');
-      } finally {
-        setIsLoading(false);
+        showToast('Worker details updated', 'success');
+      } else {
+        // Create worker in local dataStore
+        dataStore.createWorker({
+          fullName: fullName.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim() || undefined,
+          password: password.trim(),
+          dailyTarget: Number(dailyTarget) || 15,
+        });
+
+        // If Supabase configured, create auth account & profile
+        if (isSupabaseConfigured()) {
+          try {
+            const { data: authData, error: authErr } = await supabase.auth.signUp({
+              email: email.trim().toLowerCase(),
+              password: password.trim(),
+              options: {
+                data: {
+                  full_name: fullName.trim(),
+                  role: 'WORKER',
+                },
+              },
+            });
+
+            if (authData?.user) {
+              await supabase.from('profiles').upsert({
+                id: authData.user.id,
+                full_name: fullName.trim(),
+                email: email.trim().toLowerCase(),
+                phone: phone.trim() || null,
+                role: 'WORKER',
+                daily_target: Number(dailyTarget) || 15,
+                is_active: true,
+              });
+            }
+          } catch (supErr) {
+            console.warn('Supabase auth sign up error for worker:', supErr);
+          }
+        }
+
+        showToast('✓ Worker created successfully', 'success');
       }
-    }, 250);
+
+      onWorkerAdded();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Failed to save worker');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -124,13 +176,13 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
           <input
             type="email"
             required
-            placeholder="e.g. rahul@nexgenai.in"
+            placeholder="e.g. rahul@gmail.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="nexgen-input"
           />
           <p className="text-[11px] text-[#0BAA45] font-semibold mt-1 flex items-center gap-1">
-            <span>📧 Whenever work is assigned to this telecaller, an automated message and calling sheet (.CSV) will be sent to this email address automatically.</span>
+            <span>📧 Work assignment message and calling sheet (.CSV) will be sent to this email address.</span>
           </p>
         </div>
 
@@ -160,6 +212,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
               onChange={(e) => setPassword(e.target.value)}
               className="nexgen-input"
             />
+            <span className="text-[11px] text-[#6B756D] mt-1 block">Minimum 6 characters for worker login.</span>
           </div>
         )}
 
@@ -176,7 +229,7 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
             onChange={(e) => setDailyTarget(Number(e.target.value))}
             className="nexgen-input"
           />
-          <span className="text-[11px] text-[#6B756D] mt-1 block">Default company quota is 15 calls.</span>
+          <span className="text-[11px] text-[#6B756D] mt-1 block">Default company quota is 15 calls/day.</span>
         </div>
 
         <div className="pt-3 flex items-center justify-end gap-3 border-t border-[#E5E9E5]">

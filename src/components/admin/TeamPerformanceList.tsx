@@ -1,7 +1,7 @@
 import React from 'react';
 import { WorkerPerformance } from '../../types';
 import { Card } from '../common/Card';
-import { CheckCircle2, PhoneCall, ArrowUpRight } from 'lucide-react';
+import { CheckCircle2, ArrowUpRight, Users2 } from 'lucide-react';
 
 interface TeamPerformanceListProps {
   workers: WorkerPerformance[];
@@ -9,6 +9,18 @@ interface TeamPerformanceListProps {
 }
 
 export const TeamPerformanceList: React.FC<TeamPerformanceListProps> = ({ workers, onViewWorker }) => {
+  if (workers.length === 0) {
+    return (
+      <Card className="p-8 text-center bg-white border border-[#E5E9E5]">
+        <Users2 className="w-10 h-10 text-[#6B756D]/30 mx-auto mb-2" />
+        <div className="text-base font-bold text-[#172017]">No telecallers added yet</div>
+        <p className="text-xs text-[#6B756D] mt-1">
+          Go to the Workers section to add telecallers and track daily team performance.
+        </p>
+      </Card>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {workers.map((worker) => {
@@ -21,7 +33,7 @@ export const TeamPerformanceList: React.FC<TeamPerformanceListProps> = ({ worker
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-[#E9F9EF] text-[#0BAA45] font-bold flex items-center justify-center text-sm">
-                  {worker.workerName.split(' ').map((n) => n[0]).join('')}
+                  {worker.workerName.split(' ').map((n) => n[0]).join('').slice(0, 2)}
                 </div>
                 <div>
                   <h4 className="text-base font-bold text-[#172017]">{worker.workerName}</h4>

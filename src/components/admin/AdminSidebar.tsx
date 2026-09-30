@@ -10,9 +10,7 @@ import {
   LogOut,
   Menu,
   X,
-  Sparkles,
   ShieldCheck,
-  ArrowRightLeft,
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -31,7 +29,7 @@ interface AdminSidebarProps {
 }
 
 export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentTab, onSelectTab }) => {
-  const { user, logout, quickLogin } = useAuth();
+  const { user, logout } = useAuth();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const navItems: Array<{ id: AdminTab; label: string; icon: React.ReactNode }> = [
@@ -48,6 +46,15 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentTab, onSelect
     onSelectTab(tab);
     setIsMobileOpen(false);
   };
+
+  const adminInitials = user?.fullName
+    ? user.fullName
+        .split(' ')
+        .map((n) => n[0])
+        .join('')
+        .toUpperCase()
+        .slice(0, 2)
+    : 'AD';
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-white border-r border-[#E5E9E5]">
@@ -95,33 +102,11 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentTab, onSelect
         })}
       </nav>
 
-      {/* Demo Switcher Helper (Great for Testing) */}
-      <div className="p-3 mx-3 mb-2 bg-[#F7F8F6] border border-[#E5E9E5] rounded-xl">
-        <div className="text-[10px] font-bold uppercase tracking-wider text-[#6B756D] mb-1.5 flex items-center justify-between">
-          <span>Quick Switch</span>
-          <ArrowRightLeft className="w-3 h-3 text-[#0BAA45]" />
-        </div>
-        <div className="grid grid-cols-2 gap-1.5 text-xs">
-          <button
-            onClick={() => quickLogin('usr_worker_rahul')}
-            className="px-2 py-1 bg-white hover:bg-[#E9F9EF] text-[#172017] hover:text-[#0BAA45] border border-[#E5E9E5] rounded-lg font-medium transition-colors truncate text-left"
-          >
-            👤 Rahul
-          </button>
-          <button
-            onClick={() => quickLogin('usr_worker_aman')}
-            className="px-2 py-1 bg-white hover:bg-[#E9F9EF] text-[#172017] hover:text-[#0BAA45] border border-[#E5E9E5] rounded-lg font-medium transition-colors truncate text-left"
-          >
-            👤 Aman
-          </button>
-        </div>
-      </div>
-
       {/* User Profile & Logout */}
       <div className="p-3.5 border-t border-[#E5E9E5] bg-white">
         <div className="flex items-center gap-3 p-2 rounded-xl bg-[#F7F8F6] border border-[#E5E9E5]/60 mb-2">
           <div className="w-8 h-8 rounded-full bg-[#E9F9EF] text-[#0BAA45] font-bold flex items-center justify-center text-xs">
-            AD
+            {adminInitials}
           </div>
           <div className="flex-1 min-w-0">
             <div className="text-xs font-bold text-[#172017] truncate">{user?.fullName || 'Admin'}</div>
@@ -130,7 +115,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({ currentTab, onSelect
         </div>
 
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-[#E53935] hover:bg-[#FEE2E2]/50 rounded-xl transition-colors"
         >
           <LogOut className="w-4 h-4" />
