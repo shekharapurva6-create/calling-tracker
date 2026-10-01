@@ -4,6 +4,7 @@ import { Button } from '../common/Button';
 import { dataStore } from '../../services/storage/dataStore';
 import { LeadPriority, UserProfile } from '../../types';
 import { showToast } from '../common/Toast';
+import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 
 interface AddLeadModalProps {
   isOpen: boolean;
@@ -71,7 +72,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
 
     setIsLoading(true);
 
-    setTimeout(() => {
+    setTimeout(async () => {
       try {
         const result = dataStore.createLead({
           clientName: clientName.trim(),
@@ -85,6 +86,33 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({
           status: 'NEW',
           sendEmailSheet: true,
         });
+
+        // CRITICAL FIX: Also insert the lead into Supabase.
+        // The Worker Dashboard queries Supabase directly, so the lead
+        // must exist in Supabase for the worker to see it.
+        if (isSupabaseConfigured()) {
+          try {
+            const { error: supaErr } = await supabase.from('leads').upsert({
+              id: result.lead.id,
+              client_name: result.lead.clientName,
+              business_name: result.lead.businessName || null,
+              phone_number: result.lead.phoneNumber,
+              city: result.lead.city || null,
+              business_type: result.lead.businessType || null,
+              priority: result.lead.priority,
+              notes: result.lead.notes || null,
+              status: result.lead.status,
+              assigned_worker_id: result.lead.assignedWorkerId || null,
+              created_at: result.lead.createdAt,
+              updated_at: result.lead.updatedAt,
+            });
+            if (supaErr) {
+              console.error('Supabase lead insert error:', supaErr);
+            }
+          } catch (e) {
+            console.warn('Could not insert lead into Supabase:', e);
+          }
+        }
 
         if (result.emailDispatch) {
           const selectedWorker = workers.find((w) => w.id === assignedWorkerId);

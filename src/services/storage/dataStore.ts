@@ -349,6 +349,68 @@ class DataStore {
     return updated;
   }
 
+  /**
+   * CRITICAL FIX: Syncs a worker's temporary local ID to the real Supabase UUID.
+   *
+   * When a worker is created, the dataStore assigns a temp ID (e.g. usr_worker_...).
+   * After Supabase auth.signUp() returns, we get the real UUID.
+   * This method replaces ALL occurrences of the old local ID with the Supabase UUID
+   * across both profiles and leads, ensuring ID consistency between the two systems.
+   *
+   * Without this, Admin assignments use the local ID but worker auth returns
+   * the Supabase UUID, causing zero leads to show on the Worker Dashboard.
+   */
+  syncWorkerSupabaseId(localId: string, supabaseUUID: string): void {
+    if (!localId || !supabaseUUID || localId === supabaseUUID) return;
+
+    // Update the profile entry
+    const profileIdx = this.profiles.findIndex((p) => p.id === localId);
+    if (profileIdx !== -1) {
+      this.profiles[profileIdx] = {
+        ...this.profiles[profileIdx],
+        id: supabaseUUID,
+        updatedAt: new Date().toISOString(),
+      };
+      this.saveProfiles();
+    }
+
+    // Update any leads already assigned to the old local ID
+    let leadsUpdated = false;
+    this.leads.forEach((lead) => {
+      if (lead.assignedWorkerId === localId) {
+        lead.assignedWorkerId = supabaseUUID;
+        lead.updatedAt = new Date().toISOString();
+        leadsUpdated = true;
+      }
+    });
+    if (leadsUpdated) {
+      this.saveLeads();
+      broadcast('LEAD_UPDATED', null);
+    }
+
+    // Update any call logs referencing old ID
+    let logsUpdated = false;
+    this.callLogs.forEach((log) => {
+      if (log.workerId === localId) {
+        log.workerId = supabaseUUID;
+        logsUpdated = true;
+      }
+    });
+    if (logsUpdated) this.saveCallLogs();
+
+    // Update follow ups
+    let fupsUpdated = false;
+    this.followUps.forEach((fup) => {
+      if (fup.workerId === localId) {
+        fup.workerId = supabaseUUID;
+        fupsUpdated = true;
+      }
+    });
+    if (fupsUpdated) this.saveFollowUps();
+
+    broadcast('WORKER_UPDATED', { oldId: localId, newId: supabaseUUID });
+  }
+
   verifyLocalCredentials(
     email: string,
     password?: string,

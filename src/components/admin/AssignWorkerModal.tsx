@@ -6,6 +6,7 @@ import { dataStore } from '../../services/storage/dataStore';
 import { notificationService } from '../../services/notifications/notificationService';
 import { showToast } from '../common/Toast';
 import { Mail, MessageSquare, Bell, CheckCircle2, AlertTriangle, UserX, RefreshCw } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 
 interface AssignWorkerModalProps {
   lead: Lead | null;
@@ -48,11 +49,29 @@ export const AssignWorkerModal: React.FC<AssignWorkerModalProps> = ({
 
     try {
       if (selectedWorkerId) {
-        // 1. Store lead assignment in database first
+        // 1. Store lead assignment in localStorage dataStore
         const result = dataStore.assignLead(lead.id, selectedWorkerId, false);
         const workerName = selectedWorker?.fullName || 'telecaller';
 
-        // 2. Trigger notification service
+        // 2. CRITICAL FIX: Also persist assignment to Supabase leads table.
+        // The Worker Dashboard queries Supabase directly (using auth.uid()) so
+        // the assigned_worker_id column MUST be set in Supabase for the worker
+        // to see their leads after login.
+        if (isSupabaseConfigured()) {
+          try {
+            const { error: supaErr } = await supabase
+              .from('leads')
+              .update({ assigned_worker_id: selectedWorkerId, updated_at: new Date().toISOString() })
+              .eq('id', lead.id);
+            if (supaErr) {
+              console.error('Supabase assignment update error:', supaErr);
+            }
+          } catch (e) {
+            console.warn('Could not persist assignment to Supabase:', e);
+          }
+        }
+
+        // 3. Trigger notification service
         if (selectedWorker) {
           const notifLog = await notificationService.notifyLeadAssignment({
             worker: selectedWorker,
@@ -78,6 +97,17 @@ export const AssignWorkerModal: React.FC<AssignWorkerModalProps> = ({
         }
       } else {
         dataStore.unassignLead(lead.id);
+        // Also unassign in Supabase
+        if (isSupabaseConfigured()) {
+          try {
+            await supabase
+              .from('leads')
+              .update({ assigned_worker_id: null, updated_at: new Date().toISOString() })
+              .eq('id', lead.id);
+          } catch (e) {
+            console.warn('Could not unassign in Supabase:', e);
+          }
+        }
         showToast('Lead marked as unassigned', 'info');
       }
 

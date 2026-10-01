@@ -89,8 +89,8 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
 
         showToast('Worker details updated', 'success');
       } else {
-        // Create worker in local dataStore
-        dataStore.createWorker({
+        // Create worker in local dataStore first (gets a temporary local ID)
+        const newWorkerLocal = dataStore.createWorker({
           fullName: fullName.trim(),
           email: email.trim().toLowerCase(),
           phone: phone.trim() || undefined,
@@ -99,6 +99,10 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
         });
 
         // If Supabase configured, create auth account & profile
+        // CRITICAL: After signup, sync the Supabase UUID back into the local dataStore
+        // so that worker assignments (stored by local ID) match what the worker
+        // authenticates with (Supabase UUID). Without this sync, the worker dashboard
+        // will never find their assigned leads.
         if (isSupabaseConfigured()) {
           try {
             const { data: authData, error: authErr } = await supabase.auth.signUp({
@@ -113,8 +117,11 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
             });
 
             if (authData?.user) {
+              const supabaseUUID = authData.user.id;
+
+              // Write the profile to Supabase with the real auth UUID
               await supabase.from('profiles').upsert({
-                id: authData.user.id,
+                id: supabaseUUID,
                 full_name: fullName.trim(),
                 email: email.trim().toLowerCase(),
                 phone: phone.trim() || null,
@@ -122,6 +129,11 @@ export const AddWorkerModal: React.FC<AddWorkerModalProps> = ({
                 daily_target: Number(dailyTarget) || 15,
                 is_active: true,
               });
+
+              // SYNC: Replace the local-ID worker entry with the Supabase UUID
+              // This makes Admin assignment (which uses dataStore worker IDs) use
+              // the same UUID that the worker's authenticated session will have.
+              dataStore.syncWorkerSupabaseId(newWorkerLocal.id, supabaseUUID);
             }
           } catch (supErr) {
             console.warn('Supabase auth sign up error for worker:', supErr);

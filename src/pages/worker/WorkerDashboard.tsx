@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { WorkerTargetCard } from '../../components/worker/WorkerTargetCard';
 import { WorkerLeadCard } from '../../components/worker/WorkerLeadCard';
 import { Card } from '../../components/common/Card';
@@ -6,32 +6,149 @@ import { dataStore, subscribeToStore } from '../../services/storage/dataStore';
 import { Lead, WorkerPerformance } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { PhoneCall, Search, Sparkles } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
+
+// Maps a Supabase leads row to our Lead type
+function mapSupabaseLead(row: any): Lead {
+  return {
+    id: row.id,
+    clientName: row.client_name,
+    businessName: row.business_name ?? undefined,
+    phoneNumber: row.phone_number,
+    city: row.city ?? undefined,
+    businessType: row.business_type ?? undefined,
+    priority: row.priority ?? 'MEDIUM',
+    notes: row.notes ?? undefined,
+    status: row.status ?? 'NEW',
+    assignedWorkerId: row.assigned_worker_id ?? undefined,
+    assignedWorkerName: undefined,
+    createdBy: row.created_by ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
 
 export const WorkerDashboard: React.FC = () => {
-  const { user, currentWorkerId } = useAuth();
+  const { user, currentWorkerId, isLoading: authLoading } = useAuth();
+
+  // Use the authenticated user's real ID — never undefined while rendering
   const workerId = currentWorkerId || user?.id || '';
 
-  const [leads, setLeads] = useState<Lead[]>(() =>
-    workerId ? dataStore.getLeads(workerId) : []
-  );
+  const [leads, setLeads] = useState<Lead[]>([]);
   const [performance, setPerformance] = useState<WorkerPerformance>(() =>
     dataStore.getWorkerPerformance(workerId)
   );
   const [searchQuery, setSearchQuery] = useState('');
+  const [leadsLoading, setLeadsLoading] = useState(true);
 
-  const refreshData = () => {
-    if (!workerId) return;
-    setLeads(dataStore.getLeads(workerId));
-    setPerformance(dataStore.getWorkerPerformance(workerId));
-  };
+  // Ref to avoid stale-closure issues in realtime callback
+  const workerIdRef = useRef(workerId);
+  useEffect(() => { workerIdRef.current = workerId; }, [workerId]);
 
+  /**
+   * CORE FIX: Fetch leads using the correct source.
+   *
+   * When Supabase is configured, query Supabase directly using auth.uid().
+   * This bypasses any localStorage ID vs Supabase UUID mismatch entirely.
+   * The RLS policy "Workers can view assigned leads" already filters to
+   * only leads where assigned_worker_id = auth.uid().
+   *
+   * When Supabase is NOT configured (offline/localStorage mode), fall back
+   * to the dataStore which correctly filters by the local worker ID.
+   */
+  const fetchLeads = useCallback(async () => {
+    const wid = workerIdRef.current;
+    if (!wid) {
+      setLeads([]);
+      setLeadsLoading(false);
+      return;
+    }
+
+    if (isSupabaseConfigured()) {
+      try {
+        // auth.uid() is enforced by RLS — we only get this worker's leads
+        const { data, error } = await supabase
+          .from('leads')
+          .select('*')
+          .eq('assigned_worker_id', wid)
+          .order('updated_at', { ascending: false });
+
+        if (error) {
+          console.error('Supabase leads fetch error:', error);
+          // Fallback to localStorage on error
+          setLeads(dataStore.getLeads(wid));
+        } else {
+          setLeads((data ?? []).map(mapSupabaseLead));
+        }
+      } catch (e) {
+        console.error('Unexpected leads fetch error:', e);
+        setLeads(dataStore.getLeads(wid));
+      }
+    } else {
+      // Offline / localStorage-only mode
+      setLeads(dataStore.getLeads(wid));
+    }
+
+    setPerformance(dataStore.getWorkerPerformance(wid));
+    setLeadsLoading(false);
+  }, []);
+
+  // Initial fetch — wait for auth to be ready
   useEffect(() => {
-    refreshData();
+    if (authLoading) return; // Don't query until auth session is loaded
+    if (!workerId) {
+      setLeads([]);
+      setLeadsLoading(false);
+      return;
+    }
+    setLeadsLoading(true);
+    fetchLeads();
+  }, [workerId, authLoading, fetchLeads]);
+
+  // localStorage store subscription (for offline mode & call log updates)
+  useEffect(() => {
+    if (!workerId) return;
     const unsubscribe = subscribeToStore(() => {
-      refreshData();
+      fetchLeads();
     });
     return () => unsubscribe();
-  }, [workerId]);
+  }, [workerId, fetchLeads]);
+
+  // Supabase Realtime subscription — updates Worker Dashboard instantly when
+  // Admin assigns a new lead while the worker is already logged in.
+  useEffect(() => {
+    if (!workerId || !isSupabaseConfigured()) return;
+
+    const channel = supabase
+      .channel(`worker-leads-${workerId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'leads',
+          filter: `assigned_worker_id=eq.${workerId}`,
+        },
+        () => {
+          // Refetch whenever any lead assigned to this worker changes
+          fetchLeads();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [workerId, fetchLeads]);
+
+  if (authLoading) {
+    return (
+      <div className="p-8 text-center bg-white border border-[#E5E9E5] rounded-2xl shadow-card max-w-2xl mx-auto">
+        <div className="text-base font-bold text-[#172017]">Loading your session...</div>
+        <p className="text-xs text-[#6B756D] mt-1">Please wait while we load your account.</p>
+      </div>
+    );
+  }
 
   if (!workerId) {
     return (
@@ -138,12 +255,16 @@ export const WorkerDashboard: React.FC = () => {
         )}
 
         {/* Lead Cards List */}
-        {filteredLeads.length === 0 ? (
+        {leadsLoading ? (
+          <div className="p-8 text-center bg-white border border-[#E5E9E5] rounded-2xl shadow-card">
+            <div className="text-sm font-bold text-[#6B756D]">Loading your assigned leads...</div>
+          </div>
+        ) : filteredLeads.length === 0 ? (
           <div className="p-8 text-center bg-white border border-[#E5E9E5] rounded-2xl shadow-card">
             <PhoneCall className="w-10 h-10 text-[#6B756D]/30 mx-auto mb-2" />
             <div className="text-base font-bold text-[#172017]">No leads assigned yet.</div>
             <p className="text-xs text-[#6B756D] mt-1">
-              Your administrator will assign leads to your account shortly.
+              Your assigned client leads will appear here when an admin assigns them to you.
             </p>
           </div>
         ) : (

@@ -14,6 +14,7 @@ import {
   Users2,
   RefreshCw,
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../../services/supabase/supabaseClient';
 
 interface BulkAssignWorkerModalProps {
   selectedLeads: Lead[];
@@ -61,10 +62,25 @@ export const BulkAssignWorkerModal: React.FC<BulkAssignWorkerModalProps> = ({
       const worker = selectedWorker;
       if (!worker) throw new Error('Selected worker not found');
 
-      // 1. Store bulk assignment in database first
+      // 1. Store bulk assignment in localStorage dataStore
       const result = dataStore.bulkAssignLeads(leadIds, worker.id, false);
 
-      // 2. Trigger grouped assignment notification (1 grouped Email + 1 grouped WhatsApp + 1 In-App)
+      // 2. CRITICAL FIX: Also persist bulk assignment to Supabase leads table.
+      if (isSupabaseConfigured()) {
+        try {
+          const { error: supaErr } = await supabase
+            .from('leads')
+            .update({ assigned_worker_id: worker.id, updated_at: new Date().toISOString() })
+            .in('id', leadIds);
+          if (supaErr) {
+            console.error('Supabase bulk assignment update error:', supaErr);
+          }
+        } catch (e) {
+          console.warn('Could not persist bulk assignment to Supabase:', e);
+        }
+      }
+
+      // 3. Trigger grouped assignment notification (1 grouped Email + 1 grouped WhatsApp + 1 In-App)
       const notifLog = await notificationService.notifyLeadAssignment({
         worker,
         leads: result.assignedLeads,
